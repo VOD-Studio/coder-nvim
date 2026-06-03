@@ -108,7 +108,7 @@ RUN dnf -y install epel-release && \
     sudo passwd openssh-server procps-ng htop net-tools bind-utils lsof strace \
     tmux screen fish util-linux-user \
     python3 python3-pip python3-devel \
-    ripgrep fd-find fastfetch curl glibc-langpack-en \
+    ripgrep fd-find fastfetch curl glibc-langpack-en gcc clang-devel \
     && dnf -y clean all \
     && rm -rf /var/cache/dnf /var/lib/dnf /var/log/dnf* \
     && rm -rf /usr/share/{man,doc,info,licenses} /usr/share/locale/*/LC_MESSAGES 2>/dev/null; : \
@@ -180,7 +180,7 @@ RUN ln -sf /home/coder/.config/tmux/tmux.conf /home/coder/.tmux.conf
 COPY --from=builder /tmp/nvim-config /home/coder/.config/nvim
 
 # 添加 Go/fnm/rustup 环境配置
-RUN echo 'set -gx PATH $PATH /usr/local/go/bin /usr/local/fnm' > /home/coder/.config/fish/conf.d/path.fish \
+RUN echo 'set -gx PATH /usr/local/bin $PATH /usr/local/go/bin /usr/local/fnm' > /home/coder/.config/fish/conf.d/path.fish \
     && echo 'set -gx RUSTUP_HOME /home/coder/.rustup' > /home/coder/.config/fish/conf.d/rustup.fish \
     && echo 'set -gx CARGO_HOME /home/coder/.cargo' >> /home/coder/.config/fish/conf.d/rustup.fish \
     && echo 'set -gx RUSTUP_DIST_SERVER https://mirrors.ustc.edu.cn/rust-static' >> /home/coder/.config/fish/conf.d/rustup.fish \
@@ -196,6 +196,8 @@ RUN mkdir -p /home/coder/.local/share/fnm \
     && FNM_DIR=/home/coder/.local/share/fnm FNM_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node fnm exec --using=lts/latest -- npm i -g @anthropic-ai/claude-code \
     && FNM_DIR=/home/coder/.local/share/fnm fnm exec --using=lts/latest -- npm cache clean --force \
     && RUSTUP_HOME=/home/coder/.rustup CARGO_HOME=/home/coder/.cargo RUSTUP_DIST_SERVER=https://mirrors.ustc.edu.cn/rust-static RUSTUP_UPDATE_ROOT=https://mirrors.ustc.edu.cn/rust-static/rustup curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | RUSTUP_HOME=/home/coder/.rustup CARGO_HOME=/home/coder/.cargo RUSTUP_DIST_SERVER=https://mirrors.ustc.edu.cn/rust-static RUSTUP_UPDATE_ROOT=https://mirrors.ustc.edu.cn/rust-static/rustup sh -s -- -y --no-modify-path \
+    && PATH=/home/coder/.cargo/bin:$PATH /home/coder/.cargo/bin/rustup default stable \
+    && PATH=/home/coder/.cargo/bin:$PATH RUSTUP_HOME=/home/coder/.rustup CARGO_HOME=/home/coder/.cargo /home/coder/.cargo/bin/cargo install --root /usr/local tree-sitter-cli \
     && printf '[source.crates-io]\nreplace-with = "ustc"\n\n[source.ustc]\nregistry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"\n\n[registries.ustc]\nindex = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"\n' > /home/coder/.cargo/config.toml \
     && chown -R coder:coder /home/coder/.config /home/coder/.local /home/coder/.rustup /home/coder/.cargo \
     && rm -rf /tmp/* /home/coder/.cache/pip /root/.cache/pip 2>/dev/null; :
