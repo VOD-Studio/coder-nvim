@@ -38,7 +38,7 @@ ENV PATH=$PATH:/usr/local/go/bin
 RUN git clone --depth 1 https://github.com/DefectingCat/dotfiles.git /tmp/dotfiles
 
 # 克隆 nvim 配置仓库
-RUN git clone --depth 1 https://github.com/DefectingCat/nvim /tmp/nvim-config
+RUN git clone --depth 1 -b 0.12 https://github.com/DefectingCat/nvim /tmp/nvim-config
 
 # 下载 Go 工具
 RUN GOBIN=/usr/local/bin go install github.com/charmbracelet/crush@latest
@@ -67,7 +67,7 @@ RUN curl --retry 5 --retry-delay 3 -fsSL "https://github.com/neovim/neovim/relea
     && rm -rf /tmp/nvim-linux-x86_64 /tmp/nvim.tar.gz
 
 # 下载 fnm
-RUN curl --retry 3 --retry-delay 5 -fsSL https://github.com/Schniz/fnm/releases/latest/download/fnm-linux.zip -o /tmp/fnm.zip \
+RUN curl --retry 5 --retry-delay 3 --http1.1 -fsSL https://github.com/Schniz/fnm/releases/latest/download/fnm-linux.zip -o /tmp/fnm.zip \
     && mkdir -p /usr/local/fnm \
     && unzip -o /tmp/fnm.zip -d /usr/local/fnm \
     && rm /tmp/fnm.zip
@@ -205,8 +205,7 @@ RUN mkdir -p /home/coder/.local/share/nvim \
     /home/coder/.local/state/nvim \
     /home/coder/.cache/nvim \
     && chown -R coder:coder /home/coder/.config /home/coder/.local /home/coder/.cache \
-    && su - coder -c "nvim --headless -c 'quit'" || true \
-    && su - coder -c "nvim --headless '+Lazy! sync' +qa" || true \
+    && su - coder -c "nvim --headless -c 'PackUpdate' -c 'qa!'" || true \
     && rm -rf /tmp/* /root/.npm /home/coder/.npm 2>/dev/null; :
 
 WORKDIR /home/coder
