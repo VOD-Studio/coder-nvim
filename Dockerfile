@@ -47,21 +47,20 @@ RUN git clone --depth 1 https://github.com/DefectingCat/dotfiles.git /tmp/dotfil
 # 克隆 nvim 配置仓库
 RUN git clone --depth 1 -b 0.12 https://github.com/DefectingCat/nvim /tmp/nvim-config
 
-# 下载 Go 工具
-RUN GOBIN=/usr/local/bin go install github.com/charmbracelet/crush@latest
-
 # 下载第三方 CLI 工具（适配系统架构）
 RUN ARCH="${TARGETARCH:-amd64}" \
     && case "${ARCH}" in \
         "amd64") \
             RUST_TARGET="x86_64-unknown-linux-gnu" \
+            STARSHIP_TARGET="x86_64-unknown-linux-gnu" \
             LG_ARCH="Linux_x86_64" ;; \
         "arm64") \
             RUST_TARGET="aarch64-unknown-linux-gnu" \
+            STARSHIP_TARGET="aarch64-unknown-linux-musl" \
             LG_ARCH="Linux_arm64" ;; \
         *) echo "Unsupported architecture: ${ARCH}" && exit 1 ;; \
     esac \
-    && curl --retry 3 --retry-delay 5 -fsSL "https://github.com/starship/starship/releases/latest/download/starship-${RUST_TARGET}.tar.gz" \
+    && curl --retry 3 --retry-delay 5 -fsSL "https://github.com/starship/starship/releases/latest/download/starship-${STARSHIP_TARGET}.tar.gz" \
     | tar -xz -C /usr/local/bin \
     && curl --retry 3 --retry-delay 5 -fsSL "https://github.com/eza-community/eza/releases/latest/download/eza_${RUST_TARGET}.tar.gz" \
     | tar -xz -C /usr/local/bin \
@@ -102,6 +101,20 @@ RUN ARCH="${TARGETARCH:-amd64}" \
     && mkdir -p /usr/local/fnm \
     && unzip -o /tmp/fnm.zip -d /usr/local/fnm \
     && rm /tmp/fnm.zip
+
+# 下载 Bun（适配系统架构）
+RUN ARCH="${TARGETARCH:-amd64}" \
+    && case "${ARCH}" in \
+        "amd64") BUN_ARCH="x64" ;; \
+        "arm64") BUN_ARCH="aarch64" ;; \
+        *) echo "Unsupported architecture: ${ARCH}" && exit 1 ;; \
+    esac \
+    && curl --retry 5 --retry-delay 3 -fsSL "https://github.com/oven-sh/bun/releases/latest/download/bun-linux-${BUN_ARCH}.zip" -o /tmp/bun.zip \
+    && unzip -o /tmp/bun.zip -d /tmp \
+    && mv "/tmp/bun-linux-${BUN_ARCH}/bun" /usr/local/bin/bun \
+    && chmod +x /usr/local/bin/bun \
+    && rm -rf "/tmp/bun-linux-${BUN_ARCH}" /tmp/bun.zip
+
 # ============ 运行阶段 ============
 FROM rockylinux:9
 
@@ -154,7 +167,7 @@ RUN dnf -y install dnf-utils && \
     rm -rf /var/cache/dnf
 
 # 从构建阶段复制二进制工具
-COPY --from=builder /usr/local/bin/starship /usr/local/bin/eza /usr/local/bin/lsd /usr/local/bin/bat /usr/local/bin/lazygit /usr/local/bin/crush /usr/local/bin/
+COPY --from=builder /usr/local/bin/starship /usr/local/bin/eza /usr/local/bin/lsd /usr/local/bin/bat /usr/local/bin/lazygit /usr/local/bin/bun /usr/local/bin/
 
 # 从构建阶段复制 Neovim
 COPY --from=builder /usr/local/bin/nvim /usr/local/bin/
@@ -211,7 +224,7 @@ RUN ln -sf /home/coder/.config/tmux/tmux.conf /home/coder/.tmux.conf
 COPY --from=builder /tmp/nvim-config /home/coder/.config/nvim
 
 # 添加 Go/fnm/rustup 环境配置
-RUN echo 'set -gx PATH /usr/local/bin $PATH /usr/local/go/bin /usr/local/fnm' > /home/coder/.config/fish/conf.d/path.fish \
+RUN echo 'set -gx PATH /usr/local/bin $PATH /usr/local/go/bin /usr/local/fnm /home/coder/.bun/bin' > /home/coder/.config/fish/conf.d/path.fish \
     && echo 'set -gx RUSTUP_HOME /home/coder/.rustup' > /home/coder/.config/fish/conf.d/rustup.fish \
     && echo 'set -gx CARGO_HOME /home/coder/.cargo' >> /home/coder/.config/fish/conf.d/rustup.fish \
     && echo 'set -gx RUSTUP_DIST_SERVER https://mirrors.ustc.edu.cn/rust-static' >> /home/coder/.config/fish/conf.d/rustup.fish \
@@ -222,6 +235,10 @@ RUN echo 'set -gx PATH /usr/local/bin $PATH /usr/local/go/bin /usr/local/fnm' > 
 RUN mkdir -p /home/coder/.local/share/fnm \
     /home/coder/.rustup \
     /home/coder/.cargo \
+    # 配置 Bun 国内镜像源并全局安装 omp
+    && printf '[install]\nregistry = "https://registry.npmmirror.com"\n' > /root/.bunfig.toml \
+    && cp /root/.bunfig.toml /home/coder/.bunfig.toml \
+    && BUN_INSTALL=/usr/local bun add -g @oh-my-pi/pi-coding-agent \
     && FNM_DIR=/home/coder/.local/share/fnm FNM_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node fnm install 'lts/*' \
     # 全局安装 claude-code
     && FNM_DIR=/home/coder/.local/share/fnm FNM_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node fnm exec --using=lts/latest -- npm i -g @anthropic-ai/claude-code \
@@ -230,7 +247,7 @@ RUN mkdir -p /home/coder/.local/share/fnm \
     && PATH=/home/coder/.cargo/bin:$PATH /home/coder/.cargo/bin/rustup default stable \
     && PATH=/home/coder/.cargo/bin:$PATH RUSTUP_HOME=/home/coder/.rustup CARGO_HOME=/home/coder/.cargo /home/coder/.cargo/bin/cargo install --root /usr/local tree-sitter-cli \
     && printf '[source.crates-io]\nreplace-with = "ustc"\n\n[source.ustc]\nregistry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"\n\n[registries.ustc]\nindex = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"\n' > /home/coder/.cargo/config.toml \
-    && chown -R coder:coder /home/coder/.config /home/coder/.local /home/coder/.rustup /home/coder/.cargo \
+    && chown -R coder:coder /home/coder/.config /home/coder/.local /home/coder/.rustup /home/coder/.cargo /home/coder/.bunfig.toml \
     && rm -rf /tmp/* /home/coder/.cache/pip /root/.cache/pip 2>/dev/null; :
 
 # 安装 nvim 插件

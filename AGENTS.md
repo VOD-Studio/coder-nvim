@@ -3,7 +3,7 @@
 # coder-nvim
 
 ## Purpose
-Coder workspace template that provisions Rocky Linux 9 containers as remote development environments. Uses Terraform to orchestrate Docker resources and a multi-stage Dockerfile to build a dev image with Neovim, Go, Rust, Node.js, and Claude Code.
+Coder workspace template that provisions Rocky Linux 9 containers as remote development environments. Uses Terraform to orchestrate Docker resources and a multi-stage Dockerfile to build a dev image with Neovim, Go, Rust, Node.js, Bun, Claude Code, and omp (Oh My Pi).
 
 ## Key Files
 | File | Description |
