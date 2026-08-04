@@ -46,16 +46,16 @@ RUN curl --retry 3 --retry-delay 5 -fsSL https://github.com/starship/starship/re
     | tar -xz -C /usr/local/bin \
     && curl --retry 3 --retry-delay 5 -fsSL https://github.com/eza-community/eza/releases/latest/download/eza_x86_64-unknown-linux-gnu.tar.gz \
     | tar -xz -C /usr/local/bin \
-    && LSD_VER=$(curl -fsSL https://api.github.com/repos/Peltoche/lsd/releases/latest | grep '"tag_name"' | sed 's/.*"v\(.*\)".*/\1/') \
-    && curl --retry 3 --retry-delay 5 -fsSL "https://github.com/Peltoche/lsd/releases/latest/download/lsd-v${LSD_VER}-x86_64-unknown-linux-gnu.tar.gz" \
+    && LSD_VER=$(curl -fsSLI --retry 3 --retry-delay 5 -A "Mozilla/5.0" https://github.com/lsd-rs/lsd/releases/latest | grep -i '^location:' | tail -n 1 | sed 's/.*\/tag\/v\?//' | tr -d '\r\n') \
+    && curl --retry 3 --retry-delay 5 -fsSL "https://github.com/lsd-rs/lsd/releases/latest/download/lsd-v${LSD_VER}-x86_64-unknown-linux-gnu.tar.gz" \
     | tar -xz -C /usr/local/bin --strip-components=1 "lsd-v${LSD_VER}-x86_64-unknown-linux-gnu/lsd" \
-    && BAT_VER=$(curl -fsSL https://api.github.com/repos/sharkdp/bat/releases/latest | grep '"tag_name"' | sed 's/.*"v\(.*\)".*/\1/') \
+    && BAT_VER=$(curl -fsSLI --retry 3 --retry-delay 5 -A "Mozilla/5.0" https://github.com/sharkdp/bat/releases/latest | grep -i '^location:' | tail -n 1 | sed 's/.*\/tag\/v\?//' | tr -d '\r\n') \
     && curl --retry 3 --retry-delay 5 -fsSL "https://github.com/sharkdp/bat/releases/latest/download/bat-v${BAT_VER}-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/bat.tar.gz \
     && tar -xzf /tmp/bat.tar.gz -C /tmp \
     && cp /tmp/bat-v${BAT_VER}-x86_64-unknown-linux-gnu/bat /usr/local/bin/ \
     && rm -rf /tmp/bat* \
-    && LG_VER=$(curl -fsSL https://api.github.com/repos/jesseduffield/lazygit/releases/latest | grep '"tag_name"' | sed 's/.*"v\(.*\)".*/\1/') \
-    && curl --retry 3 --retry-delay 5 -fsSL "https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_${LG_VER}_linux_x86_64.tar.gz" \
+    && LG_VER=$(curl -fsSLI --retry 3 --retry-delay 5 -A "Mozilla/5.0" https://github.com/jesseduffield/lazygit/releases/latest | grep -i '^location:' | tail -n 1 | sed 's/.*\/tag\/v\?//' | tr -d '\r\n') \
+    && curl --retry 3 --retry-delay 5 -fsSL "https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_${LG_VER}_Linux_x86_64.tar.gz" \
     | tar -xz -C /usr/local/bin lazygit
 
 # 下载 Neovim 预编译二进制
@@ -173,7 +173,8 @@ RUN mkdir -p /home/coder/.config/fish/conf.d && \
 COPY --from=builder /tmp/dotfiles/fish /home/coder/.config/fish
 
 # 从构建阶段复制 tmux 配置
-COPY --from=builder /tmp/dotfiles/tmux /home/coder/.config/tmux
+RUN mkdir -p /home/coder/.config/tmux
+COPY --from=builder /tmp/dotfiles/tmux.conf /home/coder/.config/tmux/tmux.conf
 RUN ln -sf /home/coder/.config/tmux/tmux.conf /home/coder/.tmux.conf
 
 # 从构建阶段复制 nvim 配置
