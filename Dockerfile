@@ -4,6 +4,7 @@ FROM rockylinux:9 AS builder
 ARG http_proxy
 ARG https_proxy
 ARG no_proxy
+ARG TARGETARCH
 
 ENV http_proxy=${http_proxy} \
     https_proxy=${https_proxy}
@@ -26,9 +27,15 @@ RUN dnf -y install epel-release && \
     && dnf makecache \
     && dnf -y --allowerasing install git curl unzip
 
-# 下载并解压 Go（自动获取最新稳定版）
+# 下载并解压 Go（自动获取最新稳定版，适配系统架构）
 RUN GO_VER=$(curl -fsSL 'https://go.dev/VERSION?m=text' | head -1) \
-    && curl --retry 3 --retry-delay 5 -fsSL "https://go.dev/dl/${GO_VER}.linux-amd64.tar.gz" -o /tmp/go.tar.gz \
+    && ARCH="${TARGETARCH:-amd64}" \
+    && case "${ARCH}" in \
+        "amd64") GO_ARCH="amd64" ;; \
+        "arm64") GO_ARCH="arm64" ;; \
+        *) echo "Unsupported architecture: ${ARCH}" && exit 1 ;; \
+    esac \
+    && curl --retry 3 --retry-delay 5 -fsSL "https://go.dev/dl/${GO_VER}.linux-${GO_ARCH}.tar.gz" -o /tmp/go.tar.gz \
     && tar -C /usr/local -xzf /tmp/go.tar.gz \
     && rm /tmp/go.tar.gz
 
@@ -42,36 +49,59 @@ RUN git clone --depth 1 -b 0.12 https://github.com/DefectingCat/nvim /tmp/nvim-c
 
 # 下载 Go 工具
 RUN GOBIN=/usr/local/bin go install github.com/charmbracelet/crush@latest
-RUN curl --retry 3 --retry-delay 5 -fsSL https://github.com/starship/starship/releases/latest/download/starship-x86_64-unknown-linux-gnu.tar.gz \
+
+# 下载第三方 CLI 工具（适配系统架构）
+RUN ARCH="${TARGETARCH:-amd64}" \
+    && case "${ARCH}" in \
+        "amd64") \
+            RUST_TARGET="x86_64-unknown-linux-gnu" \
+            LG_ARCH="Linux_x86_64" ;; \
+        "arm64") \
+            RUST_TARGET="aarch64-unknown-linux-gnu" \
+            LG_ARCH="Linux_arm64" ;; \
+        *) echo "Unsupported architecture: ${ARCH}" && exit 1 ;; \
+    esac \
+    && curl --retry 3 --retry-delay 5 -fsSL "https://github.com/starship/starship/releases/latest/download/starship-${RUST_TARGET}.tar.gz" \
     | tar -xz -C /usr/local/bin \
-    && curl --retry 3 --retry-delay 5 -fsSL https://github.com/eza-community/eza/releases/latest/download/eza_x86_64-unknown-linux-gnu.tar.gz \
+    && curl --retry 3 --retry-delay 5 -fsSL "https://github.com/eza-community/eza/releases/latest/download/eza_${RUST_TARGET}.tar.gz" \
     | tar -xz -C /usr/local/bin \
     && LSD_VER=$(curl -fsSLI --retry 3 --retry-delay 5 -A "Mozilla/5.0" https://github.com/lsd-rs/lsd/releases/latest | grep -i '^location:' | tail -n 1 | sed 's/.*\/tag\/v\?//' | tr -d '\r\n') \
-    && curl --retry 3 --retry-delay 5 -fsSL "https://github.com/lsd-rs/lsd/releases/latest/download/lsd-v${LSD_VER}-x86_64-unknown-linux-gnu.tar.gz" \
-    | tar -xz -C /usr/local/bin --strip-components=1 "lsd-v${LSD_VER}-x86_64-unknown-linux-gnu/lsd" \
+    && curl --retry 3 --retry-delay 5 -fsSL "https://github.com/lsd-rs/lsd/releases/latest/download/lsd-v${LSD_VER}-${RUST_TARGET}.tar.gz" \
+    | tar -xz -C /usr/local/bin --strip-components=1 "lsd-v${LSD_VER}-${RUST_TARGET}/lsd" \
     && BAT_VER=$(curl -fsSLI --retry 3 --retry-delay 5 -A "Mozilla/5.0" https://github.com/sharkdp/bat/releases/latest | grep -i '^location:' | tail -n 1 | sed 's/.*\/tag\/v\?//' | tr -d '\r\n') \
-    && curl --retry 3 --retry-delay 5 -fsSL "https://github.com/sharkdp/bat/releases/latest/download/bat-v${BAT_VER}-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/bat.tar.gz \
+    && curl --retry 3 --retry-delay 5 -fsSL "https://github.com/sharkdp/bat/releases/latest/download/bat-v${BAT_VER}-${RUST_TARGET}.tar.gz" -o /tmp/bat.tar.gz \
     && tar -xzf /tmp/bat.tar.gz -C /tmp \
-    && cp /tmp/bat-v${BAT_VER}-x86_64-unknown-linux-gnu/bat /usr/local/bin/ \
+    && cp "/tmp/bat-v${BAT_VER}-${RUST_TARGET}/bat" /usr/local/bin/ \
     && rm -rf /tmp/bat* \
     && LG_VER=$(curl -fsSLI --retry 3 --retry-delay 5 -A "Mozilla/5.0" https://github.com/jesseduffield/lazygit/releases/latest | grep -i '^location:' | tail -n 1 | sed 's/.*\/tag\/v\?//' | tr -d '\r\n') \
-    && curl --retry 3 --retry-delay 5 -fsSL "https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_${LG_VER}_Linux_x86_64.tar.gz" \
+    && curl --retry 3 --retry-delay 5 -fsSL "https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_${LG_VER}_${LG_ARCH}.tar.gz" \
     | tar -xz -C /usr/local/bin lazygit
 
-# 下载 Neovim 预编译二进制
-RUN curl --retry 5 --retry-delay 3 -fsSL "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz" -o /tmp/nvim.tar.gz \
+# 下载 Neovim 预编译二进制（适配系统架构）
+RUN ARCH="${TARGETARCH:-amd64}" \
+    && case "${ARCH}" in \
+        "amd64") NVIM_ARCH="x86_64" ;; \
+        "arm64") NVIM_ARCH="arm64" ;; \
+        *) echo "Unsupported architecture: ${ARCH}" && exit 1 ;; \
+    esac \
+    && curl --retry 5 --retry-delay 3 -fsSL "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-${NVIM_ARCH}.tar.gz" -o /tmp/nvim.tar.gz \
     && tar -xzf /tmp/nvim.tar.gz -C /tmp \
-    && cp /tmp/nvim-linux-x86_64/bin/nvim /usr/local/bin/nvim \
-    && cp -r /tmp/nvim-linux-x86_64/lib/nvim /usr/local/lib/nvim \
-    && cp -r /tmp/nvim-linux-x86_64/share/nvim /usr/local/share/nvim \
-    && rm -rf /tmp/nvim-linux-x86_64 /tmp/nvim.tar.gz
+    && cp "/tmp/nvim-linux-${NVIM_ARCH}/bin/nvim" /usr/local/bin/nvim \
+    && cp -r "/tmp/nvim-linux-${NVIM_ARCH}/lib/nvim" /usr/local/lib/nvim \
+    && cp -r "/tmp/nvim-linux-${NVIM_ARCH}/share/nvim" /usr/local/share/nvim \
+    && rm -rf "/tmp/nvim-linux-${NVIM_ARCH}" /tmp/nvim.tar.gz
 
-# 下载 fnm
-RUN curl --retry 5 --retry-delay 3 --http1.1 -fsSL https://github.com/Schniz/fnm/releases/latest/download/fnm-linux.zip -o /tmp/fnm.zip \
+# 下载 fnm（适配系统架构）
+RUN ARCH="${TARGETARCH:-amd64}" \
+    && case "${ARCH}" in \
+        "amd64") FNM_FILE="fnm-linux.zip" ;; \
+        "arm64") FNM_FILE="fnm-arm64.zip" ;; \
+        *) echo "Unsupported architecture: ${ARCH}" && exit 1 ;; \
+    esac \
+    && curl --retry 5 --retry-delay 3 --http1.1 -fsSL "https://github.com/Schniz/fnm/releases/latest/download/${FNM_FILE}" -o /tmp/fnm.zip \
     && mkdir -p /usr/local/fnm \
     && unzip -o /tmp/fnm.zip -d /usr/local/fnm \
     && rm /tmp/fnm.zip
-
 # ============ 运行阶段 ============
 FROM rockylinux:9
 
