@@ -122,7 +122,7 @@ FROM rockylinux:9
 ARG http_proxy
 ARG https_proxy
 ARG no_proxy
-
+ARG TARGETARCH
 # 设置环境变量
 ENV LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8 \
@@ -243,10 +243,17 @@ RUN mkdir -p /home/coder/.local/share/fnm \
     # 全局安装 claude-code
     && FNM_DIR=/home/coder/.local/share/fnm FNM_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node fnm exec --using=lts/latest -- npm i -g @anthropic-ai/claude-code \
     && FNM_DIR=/home/coder/.local/share/fnm fnm exec --using=lts/latest -- npm cache clean --force \
-    && RUSTUP_HOME=/home/coder/.rustup CARGO_HOME=/home/coder/.cargo RUSTUP_DIST_SERVER=https://mirrors.ustc.edu.cn/rust-static RUSTUP_UPDATE_ROOT=https://mirrors.ustc.edu.cn/rust-static/rustup curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | RUSTUP_HOME=/home/coder/.rustup CARGO_HOME=/home/coder/.cargo RUSTUP_DIST_SERVER=https://mirrors.ustc.edu.cn/rust-static RUSTUP_UPDATE_ROOT=https://mirrors.ustc.edu.cn/rust-static/rustup sh -s -- -y --no-modify-path \
-    && PATH=/home/coder/.cargo/bin:$PATH /home/coder/.cargo/bin/rustup default stable \
-    && PATH=/home/coder/.cargo/bin:$PATH RUSTUP_HOME=/home/coder/.rustup CARGO_HOME=/home/coder/.cargo /home/coder/.cargo/bin/cargo install --root /usr/local tree-sitter-cli \
+    && case "$(uname -m)" in \
+        "x86_64"|"amd64") RUST_TARGET="x86_64-unknown-linux-gnu" ;; \
+        "aarch64"|"arm64") RUST_TARGET="aarch64-unknown-linux-gnu" ;; \
+        *) echo "Unsupported architecture: $(uname -m)" && exit 1 ;; \
+    esac \
+    && curl --retry 3 --retry-delay 5 -fsSL "https://mirrors.ustc.edu.cn/rust-static/rustup/dist/${RUST_TARGET}/rustup-init" -o /tmp/rustup-init \
+    && chmod +x /tmp/rustup-init \
+    && RUSTUP_HOME=/home/coder/.rustup CARGO_HOME=/home/coder/.cargo RUSTUP_DIST_SERVER=https://mirrors.ustc.edu.cn/rust-static RUSTUP_UPDATE_ROOT=https://mirrors.ustc.edu.cn/rust-static/rustup /tmp/rustup-init -y --profile minimal --no-modify-path \
+    && rm -f /tmp/rustup-init \
     && printf '[source.crates-io]\nreplace-with = "ustc"\n\n[source.ustc]\nregistry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"\n\n[registries.ustc]\nindex = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"\n' > /home/coder/.cargo/config.toml \
+    && PATH=/home/coder/.cargo/bin:$PATH RUSTUP_HOME=/home/coder/.rustup CARGO_HOME=/home/coder/.cargo /home/coder/.cargo/bin/cargo install --no-default-features --root /usr/local tree-sitter-cli \
     && chown -R coder:coder /home/coder/.config /home/coder/.local /home/coder/.rustup /home/coder/.cargo /home/coder/.bunfig.toml \
     && rm -rf /tmp/* /home/coder/.cache/pip /root/.cache/pip 2>/dev/null; :
 
