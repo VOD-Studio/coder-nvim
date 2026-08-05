@@ -20,6 +20,9 @@
 #   XV_DATA_DIR     host nvim data dir      (default: $XV_HOME/data)
 #   XV_STATE_DIR    host nvim state dir     (default: $XV_HOME/state)
 #   XV_CACHE_DIR    host nvim cache dir     (default: $XV_HOME/cache)
+# Proxy passthrough: http_proxy / https_proxy / no_proxy / all_proxy / ftp_proxy
+# (and their UPPERCASE variants) are inherited from the host shell so that
+# git clone, :TSInstall, mason.nvim, conform.nvim all go through the host proxy.
 #
 # Known limitation: relative paths that escape $PWD (e.g. `xv ../sibling/f.rs`)
 # are not rewritten. `cd ../sibling && xv f.rs` instead.
@@ -65,4 +68,8 @@ exec docker run --rm -i $TTY_OPT \
   -w /workdir \
   -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
   -e TERM="${TERM:-xterm-256color}" -e COLORTERM="$COLORTERM" \
+  \
+  --env http_proxy --env https_proxy --env no_proxy --env all_proxy --env ftp_proxy \
+  --env HTTP_PROXY --env HTTPS_PROXY --env NO_PROXY --env ALL_PROXY --env FTP_PROXY \
+  \
   "$IMAGE" nvim "$@"
