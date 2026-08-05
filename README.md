@@ -67,19 +67,33 @@ This template supports HTTP/HTTPS proxy configuration during Docker image build.
 - `https_proxy`
 - `no_proxy`
 
-## Build locally
+## Local Development
 
-```sh
-docker build --progress=plain -t coder-rocky-dev .
+### 构建镜像
+
+在当前 `coder-nvim` 仓库根目录下执行构建：
+
+```bash
+docker build -t coder-rocky-dev:latest .
 ```
 
-```sh
-docker build --force --progress=plain -t coder-rocky-dev .
-```
+### 本地开发使用
 
-```sh
+#### 直接用 docker run 进入交互式 Shell（最快速简单）
+
+当你 clone 了某个项目（假设路径为 `~/projects/my-app`），切换到该项目目录并运行：
+
+```bash
+cd ~/projects/my-app
+
 docker run -it --rm \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  coder-rocky-dev:latest
+  -v $(pwd):/home/coder/workspace \
+  -w /home/coder/workspace \
+  -u coder \
+  coder-rocky-dev:latest fish
 ```
 
+**参数说明**：
+- `-v $(pwd):/home/coder/workspace`：将本地项目目录挂载到容器内。
+- `-u coder`：以容器内的非 root 用户 `coder` 身份运行。
+- 进入后可直接使用 `nvim .` 编辑代码，或直接执行 `bun` / `go` / `cargo` / `omp` / `claude` 等。
