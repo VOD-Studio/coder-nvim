@@ -1,0 +1,41 @@
+# 持久化开发容器：host 网络 + SSH 登录 + 命名卷持久化 /home/coder
+#
+# macOS Docker Desktop 注意：默认不支持真正的 host 网络（容器在 VM 里）。
+# 若 `ssh -p 29888 localhost` 连不通，二选一：
+#   1) Docker Desktop → Settings → Resources → Network → 勾选 "Enable host networking"
+#   2) 注释下方 network_mode，启用下方注释的 ports 映射（bridge 模式）
+
+services:
+  rocky-dev:
+    image: rocky-dev:latest
+    container_name: rocky-dev
+    network_mode: host
+    # bridge fallback：注释掉上面的 network_mode，启用下面两行
+    # ports:
+    #   - "127.0.0.1:29888:29888"
+
+    user: root                     # sshd 需要 root 读 host keys + 设置权限
+    entrypoint: ["/usr/local/bin/dev-entrypoint.sh"]
+    command: []
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    working_dir: /home/coder
+
+    environment:
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+      SSHD_PORT: "29888"
+
+    volumes:
+      # 命名卷持久化整个家目录；首次挂载时 Docker 会从镜像 /home/coder 种子拷贝
+      - rocky-dev-home:/home/coder
+      # 入口脚本 bind mount，便于迭代（改 entrypoint 无需重建镜像）
+      - ./dev-entrypoint.sh:/usr/local/bin/dev-entrypoint.sh:ro
+      # 宿主公钥注入 authorized_keys
+      - ~/.ssh/id_ed25519.pub:/mnt/host-pubkey:ro
+      # Docker socket（Docker-out-of-Docker，镜像已预装 docker-ce-cli）
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  rocky-dev-home:
