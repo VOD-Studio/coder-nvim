@@ -34,6 +34,7 @@ RUN ARCH="${TARGETARCH:-amd64}" \
             STARSHIP_TARGET="x86_64-unknown-linux-gnu" \
             LG_ARCH="Linux_x86_64" \
             NVIM_ARCH="x86_64" \
+            GH_ARCH="amd64" \
             FNM_FILE="fnm-linux.zip" \
             BUN_ARCH="x64" \
             TS_ARCH="x64" ;; \
@@ -43,6 +44,7 @@ RUN ARCH="${TARGETARCH:-amd64}" \
             STARSHIP_TARGET="aarch64-unknown-linux-musl" \
             LG_ARCH="Linux_arm64" \
             NVIM_ARCH="arm64" \
+            GH_ARCH="arm64" \
             FNM_FILE="fnm-arm64.zip" \
             BUN_ARCH="aarch64" \
             TS_ARCH="arm64" ;; \
@@ -133,6 +135,14 @@ RUN ARCH="${TARGETARCH:-amd64}" \
          && gzip -d -c /tmp/dl/ts.gz > /usr/local/bin/tree-sitter \
          && chmod +x /usr/local/bin/tree-sitter \
          && rm -f /tmp/dl/ts.gz ) & pids="$pids $!" ; \
+    # 13. GitHub CLI（gh release: gh_VER_linux_{amd64,arm64}.tar.gz，与 nvim 命名不同，需独立 GH_ARCH）
+    ( GH_TAG=$(gh_tag "https://github.com/cli/cli/releases/latest") \
+         && GH_VER=$(echo "$GH_TAG" | sed 's/^v//') \
+         && gh_dl "https://github.com/cli/cli/releases/download/${GH_TAG}/gh_${GH_VER}_linux_${GH_ARCH}.tar.gz" /tmp/dl/gh.tar.gz \
+         && tar -xz -C /tmp/dl -f /tmp/dl/gh.tar.gz \
+         && mv "/tmp/dl/gh_${GH_VER}_linux_${GH_ARCH}/bin/gh" /usr/local/bin/gh \
+         && chmod +x /usr/local/bin/gh \
+         && rm -rf /tmp/dl/gh.tar.gz "/tmp/dl/gh_${GH_VER}_linux_${GH_ARCH}" ) & pids="$pids $!" ; \
     # 严格检验每一个并发后台子任务的退出代码
     for p in $pids; do wait $p || { echo "Job $p failed" >&2; exit 1; }; done ; \
     rm -rf /tmp/dl
@@ -184,7 +194,7 @@ RUN --mount=type=cache,target=/var/cache/dnf \
     && pip3 cache purge 2>/dev/null; :
 
 # 从构建阶段复制二进制工具
-COPY --from=builder /usr/local/bin/starship /usr/local/bin/eza /usr/local/bin/lsd /usr/local/bin/bat /usr/local/bin/lazygit /usr/local/bin/bun /usr/local/bin/tree-sitter /usr/local/bin/
+COPY --from=builder /usr/local/bin/starship /usr/local/bin/eza /usr/local/bin/lsd /usr/local/bin/bat /usr/local/bin/lazygit /usr/local/bin/bun /usr/local/bin/tree-sitter /usr/local/bin/gh /usr/local/bin/
 # tree-sitter CLI 用 ${TRIPLE}-gcc 编译 parser（如 aarch64-linux-gnu-gcc），
 # 但 Rocky 9 原生 gcc 不带 triple 前缀。创建 symlink 让 tree-sitter 能找到编译器。
 RUN case "${TARGETARCH:-amd64}" in \
@@ -287,7 +297,11 @@ RUN mkdir -p /home/coder/.local/share/nvim \
     /home/coder/.local/state/nvim \
     /home/coder/.cache/nvim \
     && chown -R coder:coder /home/coder/.config /home/coder/.local /home/coder/.cache \
-    && if [ -n "${GH_PROXY}" ]; then su - coder -c "git config --global url.\"${GH_PROXY}https://github.com/\".insteadOf \"https://github.com/\""; fi \
+    && if [ -n "${GH_PROXY}" ]; then \
+        su - coder -c "git config --global url.\"${GH_PROXY}https://github.com/\".insteadOf \"https://github.com/\""; \
+        # pushInsteadOf 让 clone/fetch 继续走代理加速，push 强制回官方（ghfast.top 这类下载代理不支持 push）
+        su - coder -c "git config --global url.\"https://github.com/\".pushInsteadOf \"${GH_PROXY}https://github.com/\""; \
+    fi \
     && su - coder -c "nvim --headless -c 'PackUpdate' -c 'qa!'" || true
 
 WORKDIR /home/coder
