@@ -174,6 +174,12 @@ RUN --mount=type=cache,target=/var/cache/dnf \
 
 # 从构建阶段复制二进制工具
 COPY --from=builder /usr/local/bin/starship /usr/local/bin/eza /usr/local/bin/lsd /usr/local/bin/bat /usr/local/bin/lazygit /usr/local/bin/bun /usr/local/bin/tree-sitter /usr/local/bin/
+# tree-sitter CLI 用 ${TRIPLE}-gcc 编译 parser（如 aarch64-linux-gnu-gcc），
+# 但 Rocky 9 原生 gcc 不带 triple 前缀。创建 symlink 让 tree-sitter 能找到编译器。
+RUN case "${TARGETARCH:-amd64}" in \
+        "amd64") ln -sf "$(which gcc)" /usr/local/bin/x86_64-linux-gnu-gcc ;; \
+        "arm64") ln -sf "$(which gcc)" /usr/local/bin/aarch64-linux-gnu-gcc ;; \
+    esac
 
 # 从构建阶段复制 Neovim
 COPY --from=builder /usr/local/bin/nvim /usr/local/bin/
