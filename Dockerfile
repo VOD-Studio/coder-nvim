@@ -65,11 +65,22 @@ RUN ARCH="${TARGETARCH:-amd64}" \
     && gh_ver() { gh_tag "$1" | sed 's/^[^0-9]*//'; } \
     && mkdir -p /tmp/dl \
     && pids="" ; \
-    # 1. Go（golang.google.cn 国内直连，不经 gh_dl 代理，避免被套前缀）
-    ( GO_VER=$(curl -fsSL 'https://golang.google.cn/VERSION?m=text' | head -1) \
-         && curl --retry 3 --retry-delay 2 -fsSL "https://golang.google.cn/dl/${GO_VER}.linux-${GO_ARCH}.tar.gz" -o /tmp/dl/go.tar.gz \
-         && tar -C /usr/local -xzf /tmp/dl/go.tar.gz \
-         && rm -f /tmp/dl/go.tar.gz ) & pids="$pids $!" ; \
+    # 1. Go（多源重试与降级机制：golang.google.cn -> dl.google.com -> go.dev）
+    ( GO_VER=$(curl --retry 3 --retry-delay 2 -fsSL 'https://golang.google.cn/VERSION?m=text' 2>/dev/null | head -1) || \
+      GO_VER=$(curl --retry 3 --retry-delay 2 -fsSL 'https://go.dev/VERSION?m=text' 2>/dev/null | head -1) ; \
+      if [ -z "$GO_VER" ]; then echo "Failed to fetch Go version" >&2; exit 1; fi ; \
+      downloaded=0 ; \
+      for url in "https://golang.google.cn/dl/${GO_VER}.linux-${GO_ARCH}.tar.gz" \
+                 "https://dl.google.com/go/${GO_VER}.linux-${GO_ARCH}.tar.gz" \
+                 "https://go.dev/dl/${GO_VER}.linux-${GO_ARCH}.tar.gz" ; do \
+        if curl --retry 2 --retry-delay 2 -fsSL "$url" -o /tmp/dl/go.tar.gz; then \
+          downloaded=1; break ; \
+        fi ; \
+        echo "  Go download from $url failed, trying next mirror..." >&2 ; \
+      done ; \
+      if [ "$downloaded" -ne 1 ]; then echo "Failed to download Go" >&2; exit 1; fi ; \
+      tar -C /usr/local -xzf /tmp/dl/go.tar.gz \
+      && rm -f /tmp/dl/go.tar.gz ) & pids="$pids $!" ; \
     # 2. dotfiles
     ( git clone --depth 1 "${GH_PROXY}https://github.com/DefectingCat/dotfiles.git" /tmp/dotfiles ) & pids="$pids $!" ; \
     # 3. nvim-config
