@@ -54,28 +54,28 @@ RUN ARCH="${TARGETARCH:-amd64}" \
          && tar -C /usr/local -xzf /tmp/go_tmp/go.tar.gz \
          && rm -rf /tmp/go_tmp ) & \
     # 2. dotfiles
-    && ( git clone --depth 1 "${GH_PROXY}https://github.com/DefectingCat/dotfiles.git" /tmp/dotfiles ) & \
+    ( git clone --depth 1 "${GH_PROXY}https://github.com/DefectingCat/dotfiles.git" /tmp/dotfiles ) & \
     # 3. nvim-config
-    && ( git clone --depth 1 -b 0.12 "${GH_PROXY}https://github.com/DefectingCat/nvim" /tmp/nvim-config ) & \
+    ( git clone --depth 1 -b 0.12 "${GH_PROXY}https://github.com/DefectingCat/nvim" /tmp/nvim-config ) & \
     # 4. Starship
-    && ( curl --retry 3 --retry-delay 5 -fsSL "${GH_PROXY}https://github.com/starship/starship/releases/latest/download/starship-${STARSHIP_TARGET}.tar.gz" | tar -xz -C /usr/local/bin ) & \
+    ( curl --retry 3 --retry-delay 5 -fsSL "${GH_PROXY}https://github.com/starship/starship/releases/latest/download/starship-${STARSHIP_TARGET}.tar.gz" | tar -xz -C /usr/local/bin ) & \
     # 5. eza
-    && ( curl --retry 3 --retry-delay 5 -fsSL "${GH_PROXY}https://github.com/eza-community/eza/releases/latest/download/eza_${RUST_TARGET}.tar.gz" | tar -xz -C /usr/local/bin ) & \
+    ( curl --retry 3 --retry-delay 5 -fsSL "${GH_PROXY}https://github.com/eza-community/eza/releases/latest/download/eza_${RUST_TARGET}.tar.gz" | tar -xz -C /usr/local/bin ) & \
     # 6. lsd
-    && ( LSD_VER=$(curl -fsSLI --retry 3 --retry-delay 5 -A "Mozilla/5.0" "${GH_PROXY}https://github.com/lsd-rs/lsd/releases/latest" | grep -i '^location:' | tail -n 1 | sed 's/.*\/tag\/v\?//' | tr -d '\r\n') \
+    ( LSD_VER=$(curl -fsSLI --retry 3 --retry-delay 5 -A "Mozilla/5.0" "${GH_PROXY}https://github.com/lsd-rs/lsd/releases/latest" | grep -i '^location:' | tail -n 1 | sed 's/.*\/tag\/v\?//' | tr -d '\r\n') \
          && curl --retry 3 --retry-delay 5 -fsSL "${GH_PROXY}https://github.com/lsd-rs/lsd/releases/latest/download/lsd-v${LSD_VER}-${RUST_TARGET}.tar.gz" | tar -xz -C /usr/local/bin --strip-components=1 "lsd-v${LSD_VER}-${RUST_TARGET}/lsd" ) & \
     # 7. bat
-    && ( BAT_VER=$(curl -fsSLI --retry 3 --retry-delay 5 -A "Mozilla/5.0" "${GH_PROXY}https://github.com/sharkdp/bat/releases/latest" | grep -i '^location:' | tail -n 1 | sed 's/.*\/tag\/v\?//' | tr -d '\r\n') \
+    ( BAT_VER=$(curl -fsSLI --retry 3 --retry-delay 5 -A "Mozilla/5.0" "${GH_PROXY}https://github.com/sharkdp/bat/releases/latest" | grep -i '^location:' | tail -n 1 | sed 's/.*\/tag\/v\?//' | tr -d '\r\n') \
          && mkdir -p /tmp/bat_tmp \
          && curl --retry 3 --retry-delay 5 -fsSL "${GH_PROXY}https://github.com/sharkdp/bat/releases/latest/download/bat-v${BAT_VER}-${RUST_TARGET}.tar.gz" -o /tmp/bat_tmp/bat.tar.gz \
          && tar -xzf /tmp/bat_tmp/bat.tar.gz -C /tmp/bat_tmp \
          && cp "/tmp/bat_tmp/bat-v${BAT_VER}-${RUST_TARGET}/bat" /usr/local/bin/ \
          && rm -rf /tmp/bat_tmp ) & \
     # 8. lazygit
-    && ( LG_VER=$(curl -fsSLI --retry 3 --retry-delay 5 -A "Mozilla/5.0" "${GH_PROXY}https://github.com/jesseduffield/lazygit/releases/latest" | grep -i '^location:' | tail -n 1 | sed 's/.*\/tag\/v\?//' | tr -d '\r\n') \
+    ( LG_VER=$(curl -fsSLI --retry 3 --retry-delay 5 -A "Mozilla/5.0" "${GH_PROXY}https://github.com/jesseduffield/lazygit/releases/latest" | grep -i '^location:' | tail -n 1 | sed 's/.*\/tag\/v\?//' | tr -d '\r\n') \
          && curl --retry 3 --retry-delay 5 -fsSL "${GH_PROXY}https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_${LG_VER}_${LG_ARCH}.tar.gz" | tar -xz -C /usr/local/bin lazygit ) & \
     # 9. Neovim
-    && ( mkdir -p /tmp/nvim_tmp \
+    ( mkdir -p /tmp/nvim_tmp \
          && curl --retry 5 --retry-delay 3 -fsSL "${GH_PROXY}https://github.com/neovim/neovim/releases/latest/download/nvim-linux-${NVIM_ARCH}.tar.gz" -o /tmp/nvim_tmp/nvim.tar.gz \
          && tar -xzf /tmp/nvim_tmp/nvim.tar.gz -C /tmp/nvim_tmp \
          && cp "/tmp/nvim_tmp/nvim-linux-${NVIM_ARCH}/bin/nvim" /usr/local/bin/nvim \
@@ -83,22 +83,22 @@ RUN ARCH="${TARGETARCH:-amd64}" \
          && cp -r "/tmp/nvim_tmp/nvim-linux-${NVIM_ARCH}/share/nvim" /usr/local/share/nvim \
          && rm -rf /tmp/nvim_tmp ) & \
     # 10. fnm
-    && ( mkdir -p /usr/local/fnm /tmp/fnm_tmp \
+    ( mkdir -p /usr/local/fnm /tmp/fnm_tmp \
          && curl --retry 5 --retry-delay 3 --http1.1 -fsSL "${GH_PROXY}https://github.com/Schniz/fnm/releases/latest/download/${FNM_FILE}" -o /tmp/fnm_tmp/fnm.zip \
          && unzip -o /tmp/fnm_tmp/fnm.zip -d /usr/local/fnm \
          && rm -rf /tmp/fnm_tmp ) & \
     # 11. Bun
-    && ( mkdir -p /tmp/bun_tmp \
+    ( mkdir -p /tmp/bun_tmp \
          && curl --retry 5 --retry-delay 3 -fsSL "${GH_PROXY}https://github.com/oven-sh/bun/releases/latest/download/bun-linux-${BUN_ARCH}.zip" -o /tmp/bun_tmp/bun.zip \
          && unzip -o /tmp/bun_tmp/bun.zip -d /tmp/bun_tmp \
          && mv "/tmp/bun_tmp/bun-linux-${BUN_ARCH}/bun" /usr/local/bin/bun \
          && chmod +x /usr/local/bin/bun \
          && rm -rf /tmp/bun_tmp ) & \
     # 12. tree-sitter CLI (预编译二进制 v0.25.3，避免源码编译长耗时)
-    && ( curl --retry 3 --retry-delay 5 -fsSL "${GH_PROXY}https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.3/tree-sitter-linux-${TS_ARCH}.gz" | gzip -d > /usr/local/bin/tree-sitter \
+    ( curl --retry 3 --retry-delay 5 -fsSL "${GH_PROXY}https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.3/tree-sitter-linux-${TS_ARCH}.gz" | gzip -d > /usr/local/bin/tree-sitter \
          && chmod +x /usr/local/bin/tree-sitter ) & \
     # 等待并发任务全部结束
-    && wait
+    wait
 
 ENV PATH=$PATH:/usr/local/go/bin
 
@@ -220,11 +220,11 @@ RUN mkdir -p /home/coder/.local/share/fnm \
          && cp /root/.bunfig.toml /home/coder/.bunfig.toml \
          && BUN_INSTALL=/usr/local bun add -g @oh-my-pi/pi-coding-agent ) & \
     # 2. fnm Node LTS & claude-code
-    && ( FNM_DIR=/home/coder/.local/share/fnm FNM_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node fnm install 'lts/*' \
+    ( FNM_DIR=/home/coder/.local/share/fnm FNM_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node fnm install 'lts/*' \
          && FNM_DIR=/home/coder/.local/share/fnm FNM_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node fnm exec --using=lts/latest -- npm i -g @anthropic-ai/claude-code \
          && FNM_DIR=/home/coder/.local/share/fnm fnm exec --using=lts/latest -- npm cache clean --force ) & \
     # 3. Rustup 工具链与 crates 镜像源配置
-    && ( case "$(uname -m)" in \
+    ( case "$(uname -m)" in \
             "x86_64"|"amd64") RUST_TARGET="x86_64-unknown-linux-gnu" ;; \
             "aarch64"|"arm64") RUST_TARGET="aarch64-unknown-linux-gnu" ;; \
             *) echo "Unsupported architecture: $(uname -m)" && exit 1 ;; \
@@ -234,7 +234,7 @@ RUN mkdir -p /home/coder/.local/share/fnm \
          && RUSTUP_HOME=/home/coder/.rustup CARGO_HOME=/home/coder/.cargo RUSTUP_DIST_SERVER=https://mirrors.ustc.edu.cn/rust-static RUSTUP_UPDATE_ROOT=https://mirrors.ustc.edu.cn/rust-static/rustup /tmp/rustup-init -y --profile minimal --no-modify-path \
          && rm -f /tmp/rustup-init \
          && printf '[source.crates-io]\nreplace-with = "ustc"\n\n[source.ustc]\nregistry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"\n\n[registries.ustc]\nindex = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"\n' > /home/coder/.cargo/config.toml ) & \
-    && wait \
+    wait \
     && chown -R coder:coder /home/coder/.config /home/coder/.local /home/coder/.rustup /home/coder/.cargo /home/coder/.bunfig.toml \
     && rm -rf /tmp/* /home/coder/.cache/pip /root/.cache/pip 2>/dev/null; :
 
