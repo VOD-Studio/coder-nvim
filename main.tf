@@ -37,6 +37,12 @@ variable "no_proxy" {
   type        = string
 }
 
+variable "gh_proxy" {
+  default     = "https://ghfast.top/"
+  description = "(Optional) GitHub acceleration proxy for Docker build"
+  type        = string
+}
+
 provider "docker" {
   # Defaulting to null if the variable is an empty string lets us have an optional variable without having to set our own default
   host = var.docker_socket != "" ? var.docker_socket : null
@@ -192,7 +198,8 @@ resource "docker_image" "workspace_image" {
     build_args = merge(
       var.http_proxy != "" ? { http_proxy = var.http_proxy } : {},
       var.https_proxy != "" ? { https_proxy = var.https_proxy } : {},
-      var.no_proxy != "" ? { no_proxy = var.no_proxy } : {}
+      var.no_proxy != "" ? { no_proxy = var.no_proxy } : {},
+      var.gh_proxy != "" ? { GH_PROXY = var.gh_proxy } : {}
     )
   }
 }
