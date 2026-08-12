@@ -60,13 +60,13 @@ RUN ARCH="${TARGETARCH:-amd64}" \
     # 5. eza
     && ( curl --retry 3 --retry-delay 5 -fsSL "${GH_PROXY}https://github.com/eza-community/eza/releases/latest/download/eza_${RUST_TARGET}.tar.gz" | tar -xz -C /usr/local/bin ) & pids="$pids $!" \
     # 6. lsd
-    && ( LSD_VER=$(curl -fsSLI --retry 3 --retry-delay 5 -A "Mozilla/5.0" "${GH_PROXY}https://github.com/lsd-rs/lsd/releases/latest" | grep -i '^location:' | tail -n 1 | sed 's/.*\/tag\/v\?//' | tr -d '\r\n') \
+    && ( LSD_VER=$(curl -sSI --retry 3 --retry-delay 5 -A "Mozilla/5.0" "${GH_PROXY}https://github.com/lsd-rs/lsd/releases/latest" | grep -i '^location:' | tail -n 1 | sed 's/.*\/tag\/v\?//' | tr -d '\r\n') \
          && curl --retry 3 --retry-delay 5 -fsSL "${GH_PROXY}https://github.com/lsd-rs/lsd/releases/latest/download/lsd-v${LSD_VER}-${RUST_TARGET}.tar.gz" | tar -xz -C /usr/local/bin --strip-components=1 "lsd-v${LSD_VER}-${RUST_TARGET}/lsd" ) & pids="$pids $!" \
     # 7. bat
-    && ( BAT_VER=$(curl -fsSLI --retry 3 --retry-delay 5 -A "Mozilla/5.0" "${GH_PROXY}https://github.com/sharkdp/bat/releases/latest" | grep -i '^location:' | tail -n 1 | sed 's/.*\/tag\/v\?//' | tr -d '\r\n') \
+    && ( BAT_VER=$(curl -sSI --retry 3 --retry-delay 5 -A "Mozilla/5.0" "${GH_PROXY}https://github.com/sharkdp/bat/releases/latest" | grep -i '^location:' | tail -n 1 | sed 's/.*\/tag\/v\?//' | tr -d '\r\n') \
          && curl --retry 3 --retry-delay 5 -fsSL "${GH_PROXY}https://github.com/sharkdp/bat/releases/latest/download/bat-v${BAT_VER}-${RUST_TARGET}.tar.gz" | tar -xz -C /usr/local/bin --strip-components=1 "bat-v${BAT_VER}-${RUST_TARGET}/bat" ) & pids="$pids $!" \
     # 8. lazygit
-    && ( LG_VER=$(curl -fsSLI --retry 3 --retry-delay 5 -A "Mozilla/5.0" "${GH_PROXY}https://github.com/jesseduffield/lazygit/releases/latest" | grep -i '^location:' | tail -n 1 | sed 's/.*\/tag\/v\?//' | tr -d '\r\n') \
+    && ( LG_VER=$(curl -sSI --retry 3 --retry-delay 5 -A "Mozilla/5.0" "${GH_PROXY}https://github.com/jesseduffield/lazygit/releases/latest" | grep -i '^location:' | tail -n 1 | sed 's/.*\/tag\/v\?//' | tr -d '\r\n') \
          && curl --retry 3 --retry-delay 5 -fsSL "${GH_PROXY}https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_${LG_VER}_${LG_ARCH}.tar.gz" | tar -xz -C /usr/local/bin lazygit ) & pids="$pids $!" \
     # 9. Neovim
     && ( curl --retry 5 --retry-delay 3 -fsSL "${GH_PROXY}https://github.com/neovim/neovim/releases/latest/download/nvim-linux-${NVIM_ARCH}.tar.gz" | tar -xz -C /usr/local --strip-components=1 ) & pids="$pids $!" \
