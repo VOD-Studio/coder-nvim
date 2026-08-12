@@ -25,6 +25,7 @@ RUN sed -e 's|^mirrorlist=|#mirrorlist=|g' \
     && dnf -y --allowerasing install git curl unzip gzip tar
 
 # 并行下载 Go、dotfiles、nvim-config、tree-sitter 与各种 CLI 工具
+# gh_dl: 带代理重试与直连兜底的稳健下载函数（输出到文件，与解压分离）
 RUN ARCH="${TARGETARCH:-amd64}" \
     && case "${ARCH}" in \
         "amd64") \
@@ -47,46 +48,80 @@ RUN ARCH="${TARGETARCH:-amd64}" \
             TS_ARCH="arm64" ;; \
         *) echo "Unsupported architecture: ${ARCH}" && exit 1 ;; \
     esac \
+    && gh_dl() { \
+         url="$1"; out="$2"; \
+         for attempt in 1 2 3; do \
+           if curl --retry 3 --retry-delay 2 -fsSL "${GH_PROXY}${url}" -o "$out" 2>/dev/null; then return 0; fi; \
+           echo "  proxy retry $attempt failed: $url" >&2; sleep 2; \
+         done; \
+         echo "  falling back to direct: $url" >&2; \
+         curl --retry 3 --retry-delay 2 -fsSL "${url}" -o "$out"; \
+       } \
+    && gh_ver() { \
+         curl -sSI --retry 3 --retry-delay 2 -A "Mozilla/5.0" "${GH_PROXY}$1" | grep -i '^location:' | tail -n 1 | sed 's/.*\/tag\/v\?//' | tr -d '\r\n'; \
+       } \
+    && mkdir -p /tmp/dl \
     && pids="" \
-    # 1. Go
+    # 1. Go（走 golang.google.cn 直连，无需代理）
     && ( GO_VER=$(curl -fsSL 'https://golang.google.cn/VERSION?m=text' | head -1) \
-         && curl --retry 3 --retry-delay 5 -fsSL "https://golang.google.cn/dl/${GO_VER}.linux-${GO_ARCH}.tar.gz" | tar -C /usr/local -xz ) & pids="$pids $!" \
+         && gh_dl "https://golang.google.cn/dl/${GO_VER}.linux-${GO_ARCH}.tar.gz" /tmp/dl/go.tar.gz \
+         && tar -C /usr/local -xzf /tmp/dl/go.tar.gz \
+         && rm -f /tmp/dl/go.tar.gz ) & pids="$pids $!" \
     # 2. dotfiles
     && ( git clone --depth 1 "${GH_PROXY}https://github.com/DefectingCat/dotfiles.git" /tmp/dotfiles ) & pids="$pids $!" \
     # 3. nvim-config
     && ( git clone --depth 1 -b 0.12 "${GH_PROXY}https://github.com/DefectingCat/nvim" /tmp/nvim-config ) & pids="$pids $!" \
-    # 4. Starship
-    && ( curl --retry 3 --retry-delay 5 -fsSL "${GH_PROXY}https://github.com/starship/starship/releases/latest/download/starship-${STARSHIP_TARGET}.tar.gz" | tar -xz -C /usr/local/bin ) & pids="$pids $!" \
+    # 4. Starship（解析 latest 版本后用固定 tag 下载，避开 /releases/latest/download 的 302）
+    && ( SS_VER=$(gh_ver "https://github.com/starship/starship/releases/latest") \
+         && gh_dl "https://github.com/starship/starship/releases/download/v${SS_VER}/starship-${STARSHIP_TARGET}.tar.gz" /tmp/dl/starship.tar.gz \
+         && tar -xz -C /usr/local/bin -f /tmp/dl/starship.tar.gz \
+         && rm -f /tmp/dl/starship.tar.gz ) & pids="$pids $!" \
     # 5. eza
-    && ( curl --retry 3 --retry-delay 5 -fsSL "${GH_PROXY}https://github.com/eza-community/eza/releases/latest/download/eza_${RUST_TARGET}.tar.gz" | tar -xz -C /usr/local/bin ) & pids="$pids $!" \
+    && ( EZA_VER=$(gh_ver "https://github.com/eza-community/eza/releases/latest") \
+         && gh_dl "https://github.com/eza-community/eza/releases/download/v${EZA_VER}/eza_${RUST_TARGET}.tar.gz" /tmp/dl/eza.tar.gz \
+         && tar -xz -C /usr/local/bin -f /tmp/dl/eza.tar.gz \
+         && rm -f /tmp/dl/eza.tar.gz ) & pids="$pids $!" \
     # 6. lsd
-    && ( LSD_VER=$(curl -sSI --retry 3 --retry-delay 5 -A "Mozilla/5.0" "${GH_PROXY}https://github.com/lsd-rs/lsd/releases/latest" | grep -i '^location:' | tail -n 1 | sed 's/.*\/tag\/v\?//' | tr -d '\r\n') \
-         && curl --retry 3 --retry-delay 5 -fsSL "${GH_PROXY}https://github.com/lsd-rs/lsd/releases/latest/download/lsd-v${LSD_VER}-${RUST_TARGET}.tar.gz" | tar -xz -C /usr/local/bin --strip-components=1 "lsd-v${LSD_VER}-${RUST_TARGET}/lsd" ) & pids="$pids $!" \
+    && ( LSD_VER=$(gh_ver "https://github.com/lsd-rs/lsd/releases/latest") \
+         && gh_dl "https://github.com/lsd-rs/lsd/releases/download/v${LSD_VER}/lsd-v${LSD_VER}-${RUST_TARGET}.tar.gz" /tmp/dl/lsd.tar.gz \
+         && tar -xz -C /usr/local/bin -f /tmp/dl/lsd.tar.gz --strip-components=1 "lsd-v${LSD_VER}-${RUST_TARGET}/lsd" \
+         && rm -f /tmp/dl/lsd.tar.gz ) & pids="$pids $!" \
     # 7. bat
-    && ( BAT_VER=$(curl -sSI --retry 3 --retry-delay 5 -A "Mozilla/5.0" "${GH_PROXY}https://github.com/sharkdp/bat/releases/latest" | grep -i '^location:' | tail -n 1 | sed 's/.*\/tag\/v\?//' | tr -d '\r\n') \
-         && curl --retry 3 --retry-delay 5 -fsSL "${GH_PROXY}https://github.com/sharkdp/bat/releases/latest/download/bat-v${BAT_VER}-${RUST_TARGET}.tar.gz" | tar -xz -C /usr/local/bin --strip-components=1 "bat-v${BAT_VER}-${RUST_TARGET}/bat" ) & pids="$pids $!" \
+    && ( BAT_VER=$(gh_ver "https://github.com/sharkdp/bat/releases/latest") \
+         && gh_dl "https://github.com/sharkdp/bat/releases/download/v${BAT_VER}/bat-v${BAT_VER}-${RUST_TARGET}.tar.gz" /tmp/dl/bat.tar.gz \
+         && tar -xz -C /usr/local/bin -f /tmp/dl/bat.tar.gz --strip-components=1 "bat-v${BAT_VER}-${RUST_TARGET}/bat" \
+         && rm -f /tmp/dl/bat.tar.gz ) & pids="$pids $!" \
     # 8. lazygit
-    && ( LG_VER=$(curl -sSI --retry 3 --retry-delay 5 -A "Mozilla/5.0" "${GH_PROXY}https://github.com/jesseduffield/lazygit/releases/latest" | grep -i '^location:' | tail -n 1 | sed 's/.*\/tag\/v\?//' | tr -d '\r\n') \
-         && curl --retry 3 --retry-delay 5 -fsSL "${GH_PROXY}https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_${LG_VER}_${LG_ARCH}.tar.gz" | tar -xz -C /usr/local/bin lazygit ) & pids="$pids $!" \
+    && ( LG_VER=$(gh_ver "https://github.com/jesseduffield/lazygit/releases/latest") \
+         && gh_dl "https://github.com/jesseduffield/lazygit/releases/download/v${LG_VER}/lazygit_${LG_VER}_${LG_ARCH}.tar.gz" /tmp/dl/lazygit.tar.gz \
+         && tar -xz -C /usr/local/bin -f /tmp/dl/lazygit.tar.gz lazygit \
+         && rm -f /tmp/dl/lazygit.tar.gz ) & pids="$pids $!" \
     # 9. Neovim
-    && ( curl --retry 5 --retry-delay 3 -fsSL "${GH_PROXY}https://github.com/neovim/neovim/releases/latest/download/nvim-linux-${NVIM_ARCH}.tar.gz" | tar -xz -C /usr/local --strip-components=1 ) & pids="$pids $!" \
+    && ( NVIM_VER=$(gh_ver "https://github.com/neovim/neovim/releases/latest") \
+         && gh_dl "https://github.com/neovim/neovim/releases/download/${NVIM_VER}/nvim-linux-${NVIM_ARCH}.tar.gz" /tmp/dl/nvim.tar.gz \
+         && tar -xz -C /usr/local -f /tmp/dl/nvim.tar.gz --strip-components=1 \
+         && rm -f /tmp/dl/nvim.tar.gz ) & pids="$pids $!" \
     # 10. fnm
-    && ( mkdir -p /usr/local/fnm /tmp/fnm_tmp \
-         && curl --retry 5 --retry-delay 3 --http1.1 -fsSL "${GH_PROXY}https://github.com/Schniz/fnm/releases/latest/download/${FNM_FILE}" -o /tmp/fnm_tmp/fnm.zip \
-         && unzip -o /tmp/fnm_tmp/fnm.zip -d /usr/local/fnm \
-         && rm -rf /tmp/fnm_tmp ) & pids="$pids $!" \
+    && ( FNM_VER=$(gh_ver "https://github.com/Schniz/fnm/releases/latest") \
+         && gh_dl "https://github.com/Schniz/fnm/releases/download/v${FNM_VER}/${FNM_FILE}" /tmp/dl/fnm.zip \
+         && mkdir -p /usr/local/fnm \
+         && unzip -o /tmp/dl/fnm.zip -d /usr/local/fnm \
+         && rm -f /tmp/dl/fnm.zip ) & pids="$pids $!" \
     # 11. Bun
-    && ( mkdir -p /tmp/bun_tmp \
-         && curl --retry 5 --retry-delay 3 -fsSL "${GH_PROXY}https://github.com/oven-sh/bun/releases/latest/download/bun-linux-${BUN_ARCH}.zip" -o /tmp/bun_tmp/bun.zip \
-         && unzip -o /tmp/bun_tmp/bun.zip -d /tmp/bun_tmp \
-         && mv "/tmp/bun_tmp/bun-linux-${BUN_ARCH}/bun" /usr/local/bin/bun \
+    && ( BUN_VER=$(gh_ver "https://github.com/oven-sh/bun/releases/latest") \
+         && gh_dl "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VER}/bun-linux-${BUN_ARCH}.zip" /tmp/dl/bun.zip \
+         && unzip -o /tmp/dl/bun.zip -d /tmp/dl/bun_extract \
+         && mv "/tmp/dl/bun_extract/bun-linux-${BUN_ARCH}/bun" /usr/local/bin/bun \
          && chmod +x /usr/local/bin/bun \
-         && rm -rf /tmp/bun_tmp ) & pids="$pids $!" \
-    # 12. tree-sitter CLI (预编译二进制 v0.25.3，避免源码编译长耗时)
-    && ( curl --retry 3 --retry-delay 5 -fsSL "${GH_PROXY}https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.3/tree-sitter-linux-${TS_ARCH}.gz" | gzip -d > /usr/local/bin/tree-sitter \
-         && chmod +x /usr/local/bin/tree-sitter ) & pids="$pids $!" \
+         && rm -rf /tmp/dl/bun.zip /tmp/dl/bun_extract ) & pids="$pids $!" \
+    # 12. tree-sitter CLI (固定 tag，代理直出 200，最稳)
+    && ( gh_dl "https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.3/tree-sitter-linux-${TS_ARCH}.gz" /tmp/dl/ts.gz \
+         && gzip -d -c /tmp/dl/ts.gz > /usr/local/bin/tree-sitter \
+         && chmod +x /usr/local/bin/tree-sitter \
+         && rm -f /tmp/dl/ts.gz ) & pids="$pids $!" \
     # 严格检验每一个并发后台子任务的退出代码
-    && for p in $pids; do wait $p || exit 1; done
+    && for p in $pids; do wait $p || { echo "Job $p failed" >&2; exit 1; }; done \
+    && rm -rf /tmp/dl
 
 ENV PATH=$PATH:/usr/local/go/bin
 
