@@ -57,64 +57,67 @@ RUN ARCH="${TARGETARCH:-amd64}" \
          echo "  falling back to direct: $url" >&2; \
          curl --retry 3 --retry-delay 2 -fsSL "${url}" -o "$out"; \
        } \
-    && gh_ver() { \
-         curl -sSI --retry 3 --retry-delay 2 -A "Mozilla/5.0" "${GH_PROXY}$1" | grep -i '^location:' | tail -n 1 | sed 's/.*\/tag\/v\?//' | tr -d '\r\n'; \
+    # gh_tag: 从 release/latest 的 302 头里取完整 tag（如 v1.26.0 / bun-v1.3.14 / v0.12.4），用于拼 /download/{TAG}/ 路径
+    && gh_tag() { \
+         curl -sSI --retry 3 --retry-delay 2 -A "Mozilla/5.0" "${GH_PROXY}$1" | grep -i '^location:' | tail -n 1 | sed 's#.*/tag/##' | tr -d '\r\n'; \
        } \
+    # gh_ver: 在 gh_tag 基础上剥离非数字前缀（1.26.0 / 1.3.14 / 0.12.4），用于拼文件名中的版本号
+    && gh_ver() { gh_tag "$1" | sed 's/^[^0-9]*//'; } \
     && mkdir -p /tmp/dl \
     && pids="" ; \
-    # 1. Go（走 golang.google.cn 直连，无需代理）
+    # 1. Go（golang.google.cn 国内直连，不经 gh_dl 代理，避免被套前缀）
     ( GO_VER=$(curl -fsSL 'https://golang.google.cn/VERSION?m=text' | head -1) \
-         && gh_dl "https://golang.google.cn/dl/${GO_VER}.linux-${GO_ARCH}.tar.gz" /tmp/dl/go.tar.gz \
+         && curl --retry 3 --retry-delay 2 -fsSL "https://golang.google.cn/dl/${GO_VER}.linux-${GO_ARCH}.tar.gz" -o /tmp/dl/go.tar.gz \
          && tar -C /usr/local -xzf /tmp/dl/go.tar.gz \
          && rm -f /tmp/dl/go.tar.gz ) & pids="$pids $!" ; \
     # 2. dotfiles
     ( git clone --depth 1 "${GH_PROXY}https://github.com/DefectingCat/dotfiles.git" /tmp/dotfiles ) & pids="$pids $!" ; \
     # 3. nvim-config
     ( git clone --depth 1 -b 0.12 "${GH_PROXY}https://github.com/DefectingCat/nvim" /tmp/nvim-config ) & pids="$pids $!" ; \
-    # 4. Starship（解析 latest 版本后用固定 tag 下载，避开 /releases/latest/download 的 302）
-    ( SS_VER=$(gh_ver "https://github.com/starship/starship/releases/latest") \
-         && gh_dl "https://github.com/starship/starship/releases/download/v${SS_VER}/starship-${STARSHIP_TARGET}.tar.gz" /tmp/dl/starship.tar.gz \
+    # 4. Starship
+    ( SS_TAG=$(gh_tag "https://github.com/starship/starship/releases/latest") \
+         && gh_dl "https://github.com/starship/starship/releases/download/${SS_TAG}/starship-${STARSHIP_TARGET}.tar.gz" /tmp/dl/starship.tar.gz \
          && tar -xz -C /usr/local/bin -f /tmp/dl/starship.tar.gz \
          && rm -f /tmp/dl/starship.tar.gz ) & pids="$pids $!" ; \
     # 5. eza
-    ( EZA_VER=$(gh_ver "https://github.com/eza-community/eza/releases/latest") \
-         && gh_dl "https://github.com/eza-community/eza/releases/download/v${EZA_VER}/eza_${RUST_TARGET}.tar.gz" /tmp/dl/eza.tar.gz \
+    ( EZA_TAG=$(gh_tag "https://github.com/eza-community/eza/releases/latest") \
+         && gh_dl "https://github.com/eza-community/eza/releases/download/${EZA_TAG}/eza_${RUST_TARGET}.tar.gz" /tmp/dl/eza.tar.gz \
          && tar -xz -C /usr/local/bin -f /tmp/dl/eza.tar.gz \
          && rm -f /tmp/dl/eza.tar.gz ) & pids="$pids $!" ; \
-    # 6. lsd
+    # 6. lsd（文件名含版本，需 gh_ver 取纯数字）
     ( LSD_VER=$(gh_ver "https://github.com/lsd-rs/lsd/releases/latest") \
          && gh_dl "https://github.com/lsd-rs/lsd/releases/download/v${LSD_VER}/lsd-v${LSD_VER}-${RUST_TARGET}.tar.gz" /tmp/dl/lsd.tar.gz \
          && tar -xz -C /usr/local/bin -f /tmp/dl/lsd.tar.gz --strip-components=1 "lsd-v${LSD_VER}-${RUST_TARGET}/lsd" \
          && rm -f /tmp/dl/lsd.tar.gz ) & pids="$pids $!" ; \
-    # 7. bat
+    # 7. bat（文件名含版本，需 gh_ver 取纯数字）
     ( BAT_VER=$(gh_ver "https://github.com/sharkdp/bat/releases/latest") \
          && gh_dl "https://github.com/sharkdp/bat/releases/download/v${BAT_VER}/bat-v${BAT_VER}-${RUST_TARGET}.tar.gz" /tmp/dl/bat.tar.gz \
          && tar -xz -C /usr/local/bin -f /tmp/dl/bat.tar.gz --strip-components=1 "bat-v${BAT_VER}-${RUST_TARGET}/bat" \
          && rm -f /tmp/dl/bat.tar.gz ) & pids="$pids $!" ; \
-    # 8. lazygit
+    # 8. lazygit（文件名含版本无 v 前缀，需 gh_ver 取纯数字）
     ( LG_VER=$(gh_ver "https://github.com/jesseduffield/lazygit/releases/latest") \
          && gh_dl "https://github.com/jesseduffield/lazygit/releases/download/v${LG_VER}/lazygit_${LG_VER}_${LG_ARCH}.tar.gz" /tmp/dl/lazygit.tar.gz \
          && tar -xz -C /usr/local/bin -f /tmp/dl/lazygit.tar.gz lazygit \
          && rm -f /tmp/dl/lazygit.tar.gz ) & pids="$pids $!" ; \
-    # 9. Neovim
-    ( NVIM_VER=$(gh_ver "https://github.com/neovim/neovim/releases/latest") \
-         && gh_dl "https://github.com/neovim/neovim/releases/download/${NVIM_VER}/nvim-linux-${NVIM_ARCH}.tar.gz" /tmp/dl/nvim.tar.gz \
+    # 9. Neovim（tag 形如 v0.12.4，直接用完整 tag 拼路径）
+    ( NVIM_TAG=$(gh_tag "https://github.com/neovim/neovim/releases/latest") \
+         && gh_dl "https://github.com/neovim/neovim/releases/download/${NVIM_TAG}/nvim-linux-${NVIM_ARCH}.tar.gz" /tmp/dl/nvim.tar.gz \
          && tar -xz -C /usr/local -f /tmp/dl/nvim.tar.gz --strip-components=1 \
          && rm -f /tmp/dl/nvim.tar.gz ) & pids="$pids $!" ; \
-    # 10. fnm
-    ( FNM_VER=$(gh_ver "https://github.com/Schniz/fnm/releases/latest") \
-         && gh_dl "https://github.com/Schniz/fnm/releases/download/v${FNM_VER}/${FNM_FILE}" /tmp/dl/fnm.zip \
+    # 10. fnm（文件名不含版本）
+    ( FNM_TAG=$(gh_tag "https://github.com/Schniz/fnm/releases/latest") \
+         && gh_dl "https://github.com/Schniz/fnm/releases/download/${FNM_TAG}/${FNM_FILE}" /tmp/dl/fnm.zip \
          && mkdir -p /usr/local/fnm \
          && unzip -o /tmp/dl/fnm.zip -d /usr/local/fnm \
          && rm -f /tmp/dl/fnm.zip ) & pids="$pids $!" ; \
-    # 11. Bun
-    ( BUN_VER=$(gh_ver "https://github.com/oven-sh/bun/releases/latest") \
-         && gh_dl "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VER}/bun-linux-${BUN_ARCH}.zip" /tmp/dl/bun.zip \
+    # 11. Bun（tag 形如 bun-v1.3.14，直接用完整 tag 拼路径，文件名不含版本）
+    ( BUN_TAG=$(gh_tag "https://github.com/oven-sh/bun/releases/latest") \
+         && gh_dl "https://github.com/oven-sh/bun/releases/download/${BUN_TAG}/bun-linux-${BUN_ARCH}.zip" /tmp/dl/bun.zip \
          && unzip -o /tmp/dl/bun.zip -d /tmp/dl/bun_extract \
          && mv "/tmp/dl/bun_extract/bun-linux-${BUN_ARCH}/bun" /usr/local/bin/bun \
          && chmod +x /usr/local/bin/bun \
          && rm -rf /tmp/dl/bun.zip /tmp/dl/bun_extract ) & pids="$pids $!" ; \
-    # 12. tree-sitter CLI (固定 tag，代理直出 200，最稳)
+    # 12. tree-sitter CLI (固定 tag v0.25.3，代理直出 200 最稳)
     ( gh_dl "https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.3/tree-sitter-linux-${TS_ARCH}.gz" /tmp/dl/ts.gz \
          && gzip -d -c /tmp/dl/ts.gz > /usr/local/bin/tree-sitter \
          && chmod +x /usr/local/bin/tree-sitter \
