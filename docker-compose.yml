@@ -34,6 +34,12 @@ services:
       - ./dev-entrypoint.sh:/usr/local/bin/dev-entrypoint.sh:ro
       # 宿主公钥注入 authorized_keys
       - ~/.ssh/id_ed25519.pub:/mnt/host-pubkey:ro
+      # 宿主 ~/.ssh/config（只读挂载到 staging，entrypoint 复制到 /home/coder/.ssh/config）
+      # 不直接挂到 ~/.ssh/config：宿主 uid(501)≠容器 coder uid(1000)，ssh 会因属主不符拒绝读取
+      - ~/.ssh/config:/mnt/host-ssh-config:ro
+      # 宿主私钥（只读挂载到 staging，entrypoint 复制到 /home/coder/.ssh/id_ed25519）
+      # 私钥不直接挂载到 ~/.ssh/：同上 uid 冲突 + :ro 无法 chmod 0600 → ssh 拒绝使用
+      - ~/.ssh/id_ed25519:/mnt/host-ssh-key:ro
       # Docker socket（Docker-out-of-Docker，镜像已预装 docker-ce-cli）
       - /var/run/docker.sock:/var/run/docker.sock
 

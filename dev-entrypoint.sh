@@ -30,7 +30,33 @@ else
     echo "[dev-entrypoint] WARNING: /mnt/host-pubkey 未挂载，SSH 登录将失败" >&2
 fi
 
-# 5. 前台启动 sshd（PID 1）。-D 不 fork，-e 日志到 stderr
+# 5. 注入宿主 ~/.ssh/config（只读挂载在 /mnt/host-ssh-config）
+#    幂等：缺失或与宿主不一致时覆盖；属主 coder、权限 0644
+#    （ssh 要求 config 属主为当前用户或 root，且不可被 group/other 写入）
+if [ -f /mnt/host-ssh-config ]; then
+    if [ ! -f /home/coder/.ssh/config ] || \
+       ! cmp -s /mnt/host-ssh-config /home/coder/.ssh/config; then
+        install -m 644 -o coder -g coder /mnt/host-ssh-config /home/coder/.ssh/config
+        echo "[dev-entrypoint] ~/.ssh/config synced from host"
+    fi
+else
+    echo "[dev-entrypoint] /mnt/host-ssh-config 未挂载，跳过 ssh config 注入" >&2
+fi
+
+# 6. 注入宿主私钥（只读挂载在 /mnt/host-ssh-key）
+#    幂等：缺失或与宿主不一致时覆盖；属主 coder、权限 0600
+#    （ssh 对私钥极严格：仅属主可读，否则报 UNPROTECTED PRIVATE KEY FILE 并拒绝使用）
+if [ -f /mnt/host-ssh-key ]; then
+    if [ ! -f /home/coder/.ssh/id_ed25519 ] || \
+       ! cmp -s /mnt/host-ssh-key /home/coder/.ssh/id_ed25519; then
+        install -m 600 -o coder -g coder /mnt/host-ssh-key /home/coder/.ssh/id_ed25519
+        echo "[dev-entrypoint] ~/.ssh/id_ed25519 synced from host"
+    fi
+else
+    echo "[dev-entrypoint] /mnt/host-ssh-key 未挂载，跳过私钥注入" >&2
+fi
+
+# 7. 前台启动 sshd（PID 1）。-D 不 fork，-e 日志到 stderr
 exec /usr/sbin/sshd -D -e \
     -p "${SSHD_PORT}" \
     -o PasswordAuthentication=no \
