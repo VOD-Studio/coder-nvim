@@ -1,0 +1,151 @@
+name: Release
+
+# release-please 用默认 GITHUB_TOKEN 创建 release，该 token 触发的 release 事件
+# 不会再次唤醒其它 workflow（GitHub 防循环）。因此镜像发布必须与本 action 放在
+# 同一个 workflow 内，用 job 依赖 (needs) + release_created 输出串联，无需 PAT。
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write      # release-please 打 tag / 发 release
+  pull-requests: write # release-please 维护 Release PR
+  packages: write      # 推送镜像到 GHCR
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ───────────────────────── 1. release-please ─────────────────────────
+  # 解析 Conventional Commits → 维护 Release PR → 合并后打 tag、写 CHANGELOG、发 Release
+  release-please:
+    name: release-please
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.versions.outputs.version }}
+      minor: ${{ steps.versions.outputs.minor }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+      - name: Derive version strings
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        id: versions
+        run: |
+          TAG="${{ steps.release.outputs.tag_name }}"   # vX.Y.Z
+          V="${TAG#v}"
+          echo "version=$V"          >> "$GITHUB_OUTPUT"   # 0.1.0
+          echo "minor=${V%.*}"       >> "$GITHUB_OUTPUT"   # 0.1
+
+  # ───────────────────── 2. 多架构构建（按 digest 推送） ────────────────────
+  # 用 GitHub 原生 ARM runner (ubuntu-24.04-arm) 避免 QEMU 仿真编译 Neovim 的超时。
+  # 每个平台单独构建并按 digest 推送，再由 merge 任务合并为单一 manifest list。
+  # 若 arm runner 不可用，把 arm64 一行的 runner 改回 ubuntu-latest 并在 setup 加
+  # docker/setup-qemu-action@v3 即可回退到仿真构建。
+  build:
+    name: build ${{ matrix.image }} / ${{ matrix.platform }}
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { image: rocky-dev, context: ".",        platform: amd64, runner: ubuntu-latest }
+          - { image: rocky-dev, context: ".",        platform: arm64, runner: ubuntu-24.04-arm }
+          - { image: xfy-nvim,  context: "xfy-nvim", platform: amd64, runner: ubuntu-latest }
+          - { image: xfy-nvim,  context: "xfy-nvim", platform: arm64, runner: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve lowercase GHCR image
+        id: reg
+        run: |
+          echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.image }}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          platforms: linux/${{ matrix.platform }}
+          provenance: false
+          sbom: false
+          labels: |
+            org.opencontainers.image.title=${{ matrix.image }}
+            org.opencontainers.image.version=${{ needs.release-please.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          outputs: type=image,"name=${{ steps.reg.outputs.image }}",push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.platform }}
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.image }}-${{ matrix.platform }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # ──────────────────── 3. 合并各平台为单一 manifest list ────────────────────
+  merge:
+    name: merge manifest (${{ matrix.image }})
+    needs: [release-please, build]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [rocky-dev, xfy-nvim]
+    steps:
+      - name: Resolve lowercase GHCR image
+        id: reg
+        run: |
+          echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.image }}" >> "$GITHUB_OUTPUT"
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-${{ matrix.image }}-*
+          merge-multiple: true
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.reg.outputs.image }}
+          tags: |
+            type=raw,value=${{ needs.release-please.outputs.version }}
+            type=raw,value=${{ needs.release-please.outputs.minor }}
+            type=raw,value=latest
+      - name: Create manifest list
+        env:
+          REGISTRY_IMAGE: ${{ steps.reg.outputs.image }}
+        working-directory: /tmp/digests
+        run: |
+          # 以下两处 word-splitting 是 docker 多架构 manifest 合并的标准写法
+          # (jq 拆出多个 -t 参数、printf 拆出多个 image@sha256:digest)，必须不加引号
+          # shellcheck disable=SC2046
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf "${REGISTRY_IMAGE}@sha256:%s " *)
+      - name: Inspect published image
+        env:
+          REGISTRY_IMAGE: ${{ steps.reg.outputs.image }}
+        run: |
+          docker buildx imagetools inspect "${REGISTRY_IMAGE}:${{ needs.release-please.outputs.version }}"
