@@ -28,7 +28,7 @@ jobs:
       version: ${{ steps.versions.outputs.version }}
       minor: ${{ steps.versions.outputs.minor }}
     steps:
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@v5
         id: release
         with:
           config-file: release-please-config.json
