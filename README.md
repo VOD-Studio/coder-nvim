@@ -53,7 +53,7 @@ This workspace includes:
 - **Claude Code** - Anthropic's official CLI tool for Claude, globally installed
 - **omp (Oh My Pi)** - AI coding agent for the terminal (globally installed via Bun with npmmirror)
 - **Fish shell** - Default shell with fish configuration
-- **Common utilities** - ripgrep, fd-find, tmux, screen, htop, fastfetch, make
+- **Common utilities** - ripgrep, fd-find, tmux, screen, htop, btop, fastfetch, make
 
 ### Editing the image
 
