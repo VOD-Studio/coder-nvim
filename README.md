@@ -50,6 +50,8 @@ This workspace includes:
 - **Rust** - With USTC crates.io and rustup mirrors configured
 - **Node.js (fnm)** - Fast Node Manager for Node.js version management
 - **Bun** - Fast all-in-one JavaScript runtime & toolkit (latest)
+- **GitHub CLI (`gh`)** - GitHub's official command-line tool
+- **Tailwind CSS CLI** - Tailwind CSS v4 command-line compiler, installed globally
 - **Claude Code** - Anthropic's official CLI tool for Claude, globally installed
 - **omp (Oh My Pi)** - AI coding agent for the terminal (globally installed via Bun with npmmirror)
 - **Fish shell** - Default shell with fish configuration

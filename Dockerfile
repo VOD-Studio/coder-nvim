@@ -269,10 +269,13 @@ RUN mkdir -p /home/coder/.local/share/fnm \
     /home/coder/.rustup \
     /home/coder/.cargo \
     && pids="" ; \
-    # 1. Bun 镜像源与 omp
+# 1. Bun 镜像源、omp 与 Tailwind CLI
     ( printf '[install]\nregistry = "https://registry.npmmirror.com"\n' > /root/.bunfig.toml \
          && cp /root/.bunfig.toml /home/coder/.bunfig.toml \
-         && BUN_INSTALL=/usr/local bun add -g @oh-my-pi/pi-coding-agent ) & pids="$pids $!" ; \
+         && BUN_INSTALL=/usr/local bun add -g @oh-my-pi/pi-coding-agent @tailwindcss/cli tailwindcss \
+         && rm -f /usr/local/bin/tailwindcss \
+         && printf '#!/bin/sh\nexport NODE_PATH=/usr/local/install/global/node_modules${NODE_PATH:+:$NODE_PATH}\nexec /usr/local/bin/bun /usr/local/install/global/node_modules/@tailwindcss/cli/dist/index.mjs "$@"\n' > /usr/local/bin/tailwindcss \
+         && chmod +x /usr/local/bin/tailwindcss ) & pids="$pids $!" ; \
     # 2. fnm Node LTS & claude-code
     ( FNM_DIR=/home/coder/.local/share/fnm FNM_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node fnm install 'lts/*' \
          && FNM_DIR=/home/coder/.local/share/fnm FNM_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node fnm exec --using=lts/latest -- npm i -g @anthropic-ai/claude-code \
@@ -289,6 +292,7 @@ RUN mkdir -p /home/coder/.local/share/fnm \
          && rm -f /tmp/rustup-init \
          && printf '[source.crates-io]\nreplace-with = "ustc"\n\n[source.ustc]\nregistry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"\n\n[registries.ustc]\nindex = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"\n' > /home/coder/.cargo/config.toml ) & pids="$pids $!" ; \
     for p in $pids; do wait $p || exit 1; done ; \
+    /usr/local/bin/tailwindcss --help >/dev/null && \
     chown -R coder:coder /home/coder/.config /home/coder/.local /home/coder/.rustup /home/coder/.cargo /home/coder/.bunfig.toml \
     && rm -rf /tmp/* /home/coder/.cache/pip /root/.cache/pip 2>/dev/null; :
 
