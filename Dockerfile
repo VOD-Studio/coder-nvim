@@ -36,8 +36,7 @@ RUN ARCH="${TARGETARCH:-amd64}" \
             NVIM_ARCH="x86_64" \
             GH_ARCH="amd64" \
             FNM_FILE="fnm-linux.zip" \
-            BUN_ARCH="x64" \
-            TS_ARCH="x64" ;; \
+            BUN_ARCH="x64" ;; \
         "arm64") \
             GO_ARCH="arm64" \
             RUST_TARGET="aarch64-unknown-linux-gnu" \
@@ -46,8 +45,7 @@ RUN ARCH="${TARGETARCH:-amd64}" \
             NVIM_ARCH="arm64" \
             GH_ARCH="arm64" \
             FNM_FILE="fnm-arm64.zip" \
-            BUN_ARCH="aarch64" \
-            TS_ARCH="arm64" ;; \
+            BUN_ARCH="aarch64" ;; \
         *) echo "Unsupported architecture: ${ARCH}" && exit 1 ;; \
     esac \
     && gh_dl() { \
@@ -130,12 +128,7 @@ RUN ARCH="${TARGETARCH:-amd64}" \
          && mv "/tmp/dl/bun_extract/bun-linux-${BUN_ARCH}/bun" /usr/local/bin/bun \
          && chmod +x /usr/local/bin/bun \
          && rm -rf /tmp/dl/bun.zip /tmp/dl/bun_extract ) & pids="$pids $!" ; \
-    # 12. tree-sitter CLI (固定 tag v0.25.3，代理直出 200 最稳)
-    ( gh_dl "https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.3/tree-sitter-linux-${TS_ARCH}.gz" /tmp/dl/ts.gz \
-         && gzip -d -c /tmp/dl/ts.gz > /usr/local/bin/tree-sitter \
-         && chmod +x /usr/local/bin/tree-sitter \
-         && rm -f /tmp/dl/ts.gz ) & pids="$pids $!" ; \
-    # 13. GitHub CLI（gh release: gh_VER_linux_{amd64,arm64}.tar.gz，与 nvim 命名不同，需独立 GH_ARCH）
+    # 12. GitHub CLI（gh release: gh_VER_linux_{amd64,arm64}.tar.gz，与 nvim 命名不同，需独立 GH_ARCH）
     ( GH_TAG=$(gh_tag "https://github.com/cli/cli/releases/latest") \
          && GH_VER=$(echo "$GH_TAG" | sed 's/^v//') \
          && gh_dl "https://github.com/cli/cli/releases/download/${GH_TAG}/gh_${GH_VER}_linux_${GH_ARCH}.tar.gz" /tmp/dl/gh.tar.gz \
@@ -194,7 +187,7 @@ RUN --mount=type=cache,target=/var/cache/dnf \
     && pip3 cache purge 2>/dev/null; :
 
 # 从构建阶段复制二进制工具
-COPY --from=builder /usr/local/bin/starship /usr/local/bin/eza /usr/local/bin/lsd /usr/local/bin/bat /usr/local/bin/lazygit /usr/local/bin/bun /usr/local/bin/tree-sitter /usr/local/bin/gh /usr/local/bin/
+COPY --from=builder /usr/local/bin/starship /usr/local/bin/eza /usr/local/bin/lsd /usr/local/bin/bat /usr/local/bin/lazygit /usr/local/bin/bun /usr/local/bin/gh /usr/local/bin/
 # tree-sitter CLI 用 ${TRIPLE}-gcc 编译 parser（如 aarch64-linux-gnu-gcc），
 # 但 Rocky 9 原生 gcc 不带 triple 前缀。创建 symlink 让 tree-sitter 能找到编译器。
 RUN case "${TARGETARCH:-amd64}" in \
@@ -280,7 +273,7 @@ RUN mkdir -p /home/coder/.local/share/fnm \
     ( FNM_DIR=/home/coder/.local/share/fnm FNM_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node fnm install 'lts/*' \
          && FNM_DIR=/home/coder/.local/share/fnm FNM_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node fnm exec --using=lts/latest -- npm i -g @anthropic-ai/claude-code \
          && FNM_DIR=/home/coder/.local/share/fnm fnm exec --using=lts/latest -- npm cache clean --force ) & pids="$pids $!" ; \
-    # 3. Rustup 工具链与 crates 镜像源配置
+    # 3. Rustup 工具链、crates 镜像源配置与 tree-sitter CLI 源码编译（适配 Rocky 9 glibc，确保安装最新版）
     ( case "$(uname -m)" in \
             "x86_64"|"amd64") RUST_TARGET="x86_64-unknown-linux-gnu" ;; \
             "aarch64"|"arm64") RUST_TARGET="aarch64-unknown-linux-gnu" ;; \
@@ -290,9 +283,12 @@ RUN mkdir -p /home/coder/.local/share/fnm \
          && chmod +x /tmp/rustup-init \
          && RUSTUP_HOME=/home/coder/.rustup CARGO_HOME=/home/coder/.cargo RUSTUP_DIST_SERVER=https://mirrors.ustc.edu.cn/rust-static RUSTUP_UPDATE_ROOT=https://mirrors.ustc.edu.cn/rust-static/rustup /tmp/rustup-init -y --profile minimal --no-modify-path \
          && rm -f /tmp/rustup-init \
-         && printf '[source.crates-io]\nreplace-with = "ustc"\n\n[source.ustc]\nregistry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"\n\n[registries.ustc]\nindex = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"\n' > /home/coder/.cargo/config.toml ) & pids="$pids $!" ; \
+         && printf '[source.crates-io]\nreplace-with = "ustc"\n\n[source.ustc]\nregistry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"\n\n[registries.ustc]\nindex = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"\n' > /home/coder/.cargo/config.toml \
+         && RUSTUP_HOME=/home/coder/.rustup CARGO_HOME=/home/coder/.cargo /home/coder/.cargo/bin/cargo install tree-sitter-cli --locked --root /usr/local \
+         && rm -f /usr/local/.crates* ) & pids="$pids $!" ; \
     for p in $pids; do wait $p || exit 1; done ; \
     /usr/local/bin/tailwindcss --help >/dev/null && \
+    /usr/local/bin/tree-sitter --version >/dev/null && \
     chown -R coder:coder /home/coder/.config /home/coder/.local /home/coder/.rustup /home/coder/.cargo /home/coder/.bunfig.toml \
     && rm -rf /tmp/* /home/coder/.cache/pip /root/.cache/pip 2>/dev/null; :
 
