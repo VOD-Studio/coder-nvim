@@ -6,8 +6,21 @@ set -euo pipefail
 SSHD_PORT="${SSHD_PORT:-29888}"
 echo "[dev-entrypoint] booting; sshd will listen on 0.0.0.0:${SSHD_PORT}"
 
-# 1. 缺失则生成 SSH host keys（首次启动 / 命名卷为空时）
-ssh-keygen -A >/dev/null
+# 1. 确保 SSH Host Keys 持久化（存储在已持久化的 /home/coder 中，避免容器重建后 host key 变更）
+HOST_KEYS_DIR="/home/coder/.ssh_host_keys"
+mkdir -p "${HOST_KEYS_DIR}"
+chmod 700 "${HOST_KEYS_DIR}"
+
+if [ ! -f "${HOST_KEYS_DIR}/ssh_host_ed25519_key" ]; then
+    echo "[dev-entrypoint] generating persistent SSH host keys in ${HOST_KEYS_DIR}..."
+    ssh-keygen -q -t ed25519 -N '' -f "${HOST_KEYS_DIR}/ssh_host_ed25519_key"
+    ssh-keygen -q -t rsa -b 4096 -N '' -f "${HOST_KEYS_DIR}/ssh_host_rsa_key"
+    ssh-keygen -q -t ecdsa -N '' -f "${HOST_KEYS_DIR}/ssh_host_ecdsa_key"
+fi
+
+cp "${HOST_KEYS_DIR}"/ssh_host_* /etc/ssh/
+chmod 600 /etc/ssh/ssh_host_*_key
+chmod 644 /etc/ssh/ssh_host_*_key.pub
 
 # 2. sshd privilege separation 目录
 mkdir -p /run/sshd
