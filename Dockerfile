@@ -175,7 +175,7 @@ RUN --mount=type=cache,target=/var/cache/dnf \
     && sed -i 's|https://download.docker.com|https://mirrors.aliyun.com/docker-ce|g' /etc/yum.repos.d/docker-ce.repo \
     && dnf makecache \
     && dnf -y --allowerasing install \
-    wget git vim nano unzip zip tar gzip bzip2 xz make \
+    wget git vim nano unzip zip tar gzip bzip2 xz brotli make \
     sudo passwd openssh-server procps-ng htop btop net-tools bind-utils lsof strace \
     tmux screen fish util-linux-user \
     python3 python3-pip python3-devel \
