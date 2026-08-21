@@ -76,7 +76,7 @@ This template supports HTTP/HTTPS proxy configuration during Docker image build.
 在当前 `coder-nvim` 仓库根目录下执行构建：
 
 ```bash
-docker build -t coder-rocky-dev:latest .
+docker build --pull --no-cache -t coder-rocky-dev:latest .
 ```
 
 ### 本地开发使用

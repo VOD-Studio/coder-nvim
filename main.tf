@@ -195,6 +195,8 @@ resource "docker_image" "workspace_image" {
   build {
     context    = "."
     dockerfile = "Dockerfile"
+    pull_parent = true
+    no_cache    = true
     build_args = merge(
       var.http_proxy != "" ? { http_proxy = var.http_proxy } : {},
       var.https_proxy != "" ? { https_proxy = var.https_proxy } : {},

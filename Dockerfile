@@ -22,6 +22,7 @@ RUN sed -e 's|^mirrorlist=|#mirrorlist=|g' \
         -e 's|^#baseurl=https\?://download.example/pub/epel/|baseurl=https://mirrors.ustc.edu.cn/epel/|g' \
         -i.bak /etc/yum.repos.d/epel{,-testing}.repo \
     && dnf makecache \
+    && dnf -y --refresh upgrade \
     && dnf -y --allowerasing install git curl unzip gzip tar
 
 # 并行下载 Go、dotfiles、nvim-config、tree-sitter 与各种 CLI 工具
@@ -174,6 +175,7 @@ RUN --mount=type=cache,target=/var/cache/dnf \
         -i.bak /etc/yum.repos.d/epel{,-testing}.repo \
     && sed -i 's|https://download.docker.com|https://mirrors.aliyun.com/docker-ce|g' /etc/yum.repos.d/docker-ce.repo \
     && dnf makecache \
+    && dnf -y --refresh upgrade \
     && dnf -y --allowerasing install \
     wget git vim nano unzip zip tar gzip bzip2 xz brotli make \
     sudo passwd openssh-server procps-ng htop btop net-tools bind-utils lsof strace \
