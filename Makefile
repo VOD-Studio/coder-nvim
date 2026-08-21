@@ -6,7 +6,7 @@ TAG ?= latest
 all: docker
 
 docker:
-	docker build -t $(IMAGE_NAME):$(TAG) .
+	docker build --no-cache -t $(IMAGE_NAME):$(TAG) .
 
 # ====== 持久化开发容器（compose + SSH 登录）======
 COMPOSE := docker compose
