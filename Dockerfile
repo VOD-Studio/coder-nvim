@@ -5,7 +5,7 @@ ARG http_proxy
 ARG https_proxy
 ARG no_proxy
 ARG TARGETARCH
-ARG GH_PROXY="https://ghfast.top/"
+ARG GH_PROXY=""
 ENV http_proxy=${http_proxy} \
     https_proxy=${https_proxy}
 
@@ -59,11 +59,20 @@ RUN ARCH="${TARGETARCH:-amd64}" \
          curl --retry 3 --retry-delay 2 -fsSL "${url}" -o "$out"; \
        } \
     # gh_tag: 从 release/latest 的 302 头里取完整 tag（如 v1.26.0 / bun-v1.3.14 / v0.12.4），用于拼 /download/{TAG}/ 路径
+    # 校验结果形如版本号：GH_PROXY 被拦截/失效时 location 头会是代理商的错误跳转页而非 GitHub 重定向，
+    # 不校验会拼出非法 URL 静默 404，而不是在这里直接报错退出
     && gh_tag() { \
-         curl -sSI --retry 3 --retry-delay 2 -A "Mozilla/5.0" "${GH_PROXY}$1" | grep -i '^location:' | tail -n 1 | sed 's#.*/tag/##' | tr -d '\r\n'; \
+         tag=$(curl -sSI --retry 3 --retry-delay 2 -A "Mozilla/5.0" "${GH_PROXY}$1" | grep -i '^location:' | tail -n 1 | sed 's#.*/tag/##' | tr -d '\r\n'); \
+         case "$tag" in \
+           ''|*[!A-Za-z0-9._-]*) echo "  gh_tag: 无法从 $1 解析出合法 tag（得到 '$tag'）— 检查 GH_PROXY='${GH_PROXY}' 或网络连通性" >&2; return 1 ;; \
+         esac; \
+         echo "$tag"; \
        } \
     # gh_ver: 在 gh_tag 基础上剥离非数字前缀（1.26.0 / 1.3.14 / 0.12.4），用于拼文件名中的版本号
-    && gh_ver() { gh_tag "$1" | sed 's/^[^0-9]*//'; } \
+    && gh_ver() { \
+         tag=$(gh_tag "$1") || return 1; \
+         echo "$tag" | sed 's/^[^0-9]*//'; \
+       } \
     && mkdir -p /tmp/dl \
     && pids="" ; \
     # 1. Go（多源重试与降级机制：golang.google.cn -> dl.google.com -> go.dev）
@@ -151,7 +160,7 @@ ARG http_proxy
 ARG https_proxy
 ARG no_proxy
 ARG TARGETARCH
-ARG GH_PROXY="https://ghfast.top/"
+ARG GH_PROXY=""
 # 设置环境变量
 ENV LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8 \
@@ -259,7 +268,18 @@ RUN echo 'set -gx PATH /usr/local/bin $PATH /usr/local/go/bin /usr/local/fnm /ho
     && echo 'set -gx RUSTUP_UPDATE_ROOT https://mirrors.ustc.edu.cn/rust-static/rustup' >> /home/coder/.config/fish/conf.d/rustup.fish \
     && echo 'set -gx PATH $PATH /home/coder/.cargo/bin' >> /home/coder/.config/fish/conf.d/rustup.fish
 
-# 并行安装应用环境 (Bun 全局包 / fnm Node & claude-code / Rustup) 并设置权限
+# 安装 Codex CLI（系统级安装，避免被 /home/coder 持久卷遮蔽）
+RUN curl --retry 3 --retry-delay 5 -fsSL https://chatgpt.com/codex/install.sh -o /tmp/install-codex.sh \
+    && for attempt in 1 2 3; do \
+        if CODEX_NON_INTERACTIVE=1 CODEX_INSTALL_DIR=/usr/local/bin CODEX_HOME=/opt/codex sh /tmp/install-codex.sh; then break; fi; \
+        if [ "$attempt" -eq 3 ]; then exit 1; fi; \
+        echo "Codex install attempt $attempt failed, retrying..." >&2; \
+        sleep 5; \
+    done \
+    && /usr/local/bin/codex --version \
+    && rm -f /tmp/install-codex.sh
+
+# 并行安装应用环境 (Bun 全局包 / fnm Node 与 Claude Code / Rustup) 并设置权限
 RUN mkdir -p /home/coder/.local/share/fnm \
     /home/coder/.rustup \
     /home/coder/.cargo \
@@ -271,7 +291,7 @@ RUN mkdir -p /home/coder/.local/share/fnm \
          && rm -f /usr/local/bin/tailwindcss \
          && printf '#!/bin/sh\nexport NODE_PATH=/usr/local/install/global/node_modules${NODE_PATH:+:$NODE_PATH}\nexec /usr/local/bin/bun /usr/local/install/global/node_modules/@tailwindcss/cli/dist/index.mjs "$@"\n' > /usr/local/bin/tailwindcss \
          && chmod +x /usr/local/bin/tailwindcss ) & pids="$pids $!" ; \
-    # 2. fnm Node LTS & claude-code
+    # 2. fnm Node LTS 与 Claude Code
     ( FNM_DIR=/home/coder/.local/share/fnm FNM_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node fnm install 'lts/*' \
          && FNM_DIR=/home/coder/.local/share/fnm FNM_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node fnm exec --using=lts/latest -- npm i -g @anthropic-ai/claude-code \
          && FNM_DIR=/home/coder/.local/share/fnm fnm exec --using=lts/latest -- npm cache clean --force ) & pids="$pids $!" ; \

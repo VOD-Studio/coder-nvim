@@ -1,12 +1,19 @@
 IMAGE_NAME ?= rocky-dev
 TAG ?= latest
+PROXY_URL ?= http://host.docker.internal:10808
+NO_PROXY_HOSTS ?= localhost,127.0.0.1,host.docker.internal,mirrors.ustc.edu.cn,mirrors.aliyun.com,npmmirror.com,golang.google.cn
 
 .PHONY: all docker
 
 all: docker
 
 docker:
-	docker build --no-cache -t $(IMAGE_NAME):$(TAG) .
+	docker build --progress=plain \
+		--add-host=host.docker.internal:host-gateway \
+		--build-arg http_proxy="$(PROXY_URL)" \
+		--build-arg https_proxy="$(PROXY_URL)" \
+		--build-arg no_proxy="$(NO_PROXY_HOSTS)" \
+		-t $(IMAGE_NAME):$(TAG) .
 
 # ====== 持久化开发容器（compose + SSH 登录）======
 COMPOSE := docker compose

@@ -38,7 +38,7 @@ variable "no_proxy" {
 }
 
 variable "gh_proxy" {
-  default     = "https://ghfast.top/"
+  default     = ""
   description = "(Optional) GitHub acceleration proxy for Docker build"
   type        = string
 }
