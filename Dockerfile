@@ -185,13 +185,19 @@ RUN --mount=type=cache,target=/var/cache/dnf \
     && sed -i 's|https://download.docker.com|https://mirrors.aliyun.com/docker-ce|g' /etc/yum.repos.d/docker-ce.repo \
     && dnf makecache \
     && dnf -y --refresh upgrade \
-    && dnf -y --allowerasing install \
+    && dnf -y --allowerasing --setopt=install_weak_deps=False install \
     wget git vim nano unzip zip tar gzip bzip2 xz brotli make \
     sudo passwd openssh-server procps-ng htop btop net-tools bind-utils lsof strace \
     tmux screen fish util-linux-user \
     python3 python3-pip python3-devel \
     ripgrep fd-find fastfetch curl glibc-langpack-en gcc clang-devel \
     docker-ce-cli \
+    # headless browser 修复：Chrome for Testing 无 linux-arm64 构建，omp（@oh-my-pi/pi-coding-agent）
+    # 在 arm64 主机上会下载到标着 linux_arm 但实际是 x86_64 的二进制，此主机无 x86_64 仿真导致 browser 工具不可用；
+    # 预装系统 chromium 后 omp 的可执行文件解析会优先探测并使用它。install_weak_deps=False 避免连带装上
+    # chromium 用不到的桌面弱依赖（NetworkManager/ModemManager、tracker 媒体索引及编解码器、pipewire/wireplumber、
+    # polkit、upower、xdg-desktop-portal、flatpak、webkit2gtk3-jsc、poppler 等，经实测均非其硬依赖；实测约省 180MB）
+    chromium \
     && dnf -y clean all \
     && rm -rf /var/cache/dnf /var/lib/dnf /var/log/dnf* \
     && rm -rf /usr/share/{man,doc,info,licenses} /usr/share/locale/*/LC_MESSAGES 2>/dev/null; : \
