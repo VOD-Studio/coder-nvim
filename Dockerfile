@@ -296,7 +296,18 @@ RUN mkdir -p /home/coder/.local/share/fnm \
          && BUN_INSTALL=/usr/local bun add -g @oh-my-pi/pi-coding-agent @tailwindcss/cli tailwindcss \
          && rm -f /usr/local/bin/tailwindcss \
          && printf '#!/bin/sh\nexport NODE_PATH=/usr/local/install/global/node_modules${NODE_PATH:+:$NODE_PATH}\nexec /usr/local/bin/bun /usr/local/install/global/node_modules/@tailwindcss/cli/dist/index.mjs "$@"\n' > /usr/local/bin/tailwindcss \
-         && chmod +x /usr/local/bin/tailwindcss ) & pids="$pids $!" ; \
+         && chmod +x /usr/local/bin/tailwindcss \
+         # npmmirror 对 @oh-my-pi/pi-natives-<platform> 这类平台原生子包的同步常滞后于主包（曾实测只差一个补丁版本）。
+         # optionalDependency 在镜像上缺失所需版本时 bun 会静默跳过、不报错，导致 omp 启动时抛
+         # "Failed to load pi_natives native addon"。用 omp --version 直接探测原生模块能否加载，
+         # 缺失就从官方 registry 补装与主包版本一致的当前平台包兜底
+         && if ! /usr/local/bin/omp --version >/dev/null 2>&1; then \
+              echo "  omp native addon missing after mirror install, falling back to registry.npmjs.org" >&2; \
+              PI_ARCH=$([ "${TARGETARCH:-amd64}" = "arm64" ] && echo arm64 || echo x64); \
+              PI_VER=$(grep -m1 '"version"' /usr/local/install/global/node_modules/@oh-my-pi/pi-natives/package.json | sed -E 's/.*: *"([^"]+)".*/\1/'); \
+              BUN_INSTALL=/usr/local bun add -g "@oh-my-pi/pi-natives-linux-${PI_ARCH}@${PI_VER}" --registry=https://registry.npmjs.org; \
+            fi \
+         && /usr/local/bin/omp --version >/dev/null ) & pids="$pids $!" ; \
     # 2. fnm Node LTS 与 Claude Code
     ( FNM_DIR=/home/coder/.local/share/fnm FNM_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node fnm install 'lts/*' \
          && FNM_DIR=/home/coder/.local/share/fnm FNM_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node fnm exec --using=lts/latest -- npm i -g @anthropic-ai/claude-code \
@@ -317,6 +328,7 @@ RUN mkdir -p /home/coder/.local/share/fnm \
     for p in $pids; do wait $p || exit 1; done ; \
     /usr/local/bin/tailwindcss --help >/dev/null && \
     /usr/local/bin/tree-sitter --version >/dev/null && \
+    /usr/local/bin/omp --version >/dev/null && \
     chown -R coder:coder /home/coder/.config /home/coder/.local /home/coder/.rustup /home/coder/.cargo /home/coder/.bunfig.toml \
     && rm -rf /tmp/* /home/coder/.cache/pip /root/.cache/pip 2>/dev/null; :
 
