@@ -190,14 +190,11 @@ RUN --mount=type=cache,target=/var/cache/dnf \
     sudo passwd openssh-server procps-ng htop btop net-tools bind-utils lsof strace \
     tmux screen fish util-linux-user \
     python3 python3-pip python3-devel \
-    ripgrep fd-find fastfetch curl glibc-langpack-en gcc clang-devel \
+    ripgrep fd-find fastfetch curl glibc-langpack-en gcc clang clang-tools-extra \
     docker-ce-cli \
-    # headless browser 修复：Chrome for Testing 无 linux-arm64 构建，omp（@oh-my-pi/pi-coding-agent）
-    # 在 arm64 主机上会下载到标着 linux_arm 但实际是 x86_64 的二进制，此主机无 x86_64 仿真导致 browser 工具不可用；
-    # 预装系统 chromium 后 omp 的可执行文件解析会优先探测并使用它。install_weak_deps=False 避免连带装上
-    # chromium 用不到的桌面弱依赖（NetworkManager/ModemManager、tracker 媒体索引及编解码器、pipewire/wireplumber、
-    # polkit、upower、xdg-desktop-portal、flatpak、webkit2gtk3-jsc、poppler 等，经实测均非其硬依赖；实测约省 180MB）
-    chromium \
+    # Chrome for Testing 无 linux-arm64 构建；安装 EPEL headless shell，并暴露为 chromium 供 omp 探测
+    chromium-headless \
+    && ln -sf /usr/lib64/chromium-browser/headless_shell /usr/local/bin/chromium \
     && dnf -y clean all \
     && rm -rf /var/cache/dnf /var/lib/dnf /var/log/dnf* \
     && rm -rf /usr/share/{man,doc,info,licenses} /usr/share/locale/*/LC_MESSAGES 2>/dev/null; : \
@@ -325,12 +322,17 @@ RUN mkdir -p /home/coder/.local/share/fnm \
          && printf '[source.crates-io]\nreplace-with = "ustc"\n\n[source.ustc]\nregistry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"\n\n[registries.ustc]\nindex = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"\n' > /home/coder/.cargo/config.toml \
          && RUSTUP_HOME=/home/coder/.rustup CARGO_HOME=/home/coder/.cargo /home/coder/.cargo/bin/cargo install tree-sitter-cli --locked --root /usr/local \
          && rm -f /usr/local/.crates* ) & pids="$pids $!" ; \
-    for p in $pids; do wait $p || exit 1; done ; \
-    /usr/local/bin/tailwindcss --help >/dev/null && \
-    /usr/local/bin/tree-sitter --version >/dev/null && \
-    /usr/local/bin/omp --version >/dev/null && \
-    chown -R coder:coder /home/coder/.config /home/coder/.local /home/coder/.rustup /home/coder/.cargo /home/coder/.bunfig.toml \
-    && rm -rf /tmp/* /home/coder/.cache/pip /root/.cache/pip 2>/dev/null; :
+    for p in $pids; do wait $p || exit 1; done \
+    && rm -rf /usr/local/install/cache \
+        /home/coder/.cargo/registry \
+        /home/coder/.cargo/git \
+        /tmp/* \
+        /home/coder/.cache/pip \
+        /root/.cache/pip \
+    && /usr/local/bin/tailwindcss --help >/dev/null \
+    && /usr/local/bin/tree-sitter --version >/dev/null \
+    && /usr/local/bin/omp --version >/dev/null \
+    && chown -R coder:coder /home/coder/.config /home/coder/.local /home/coder/.rustup /home/coder/.cargo /home/coder/.bunfig.toml
 
 # 安装 nvim 插件
 RUN mkdir -p /home/coder/.local/share/nvim \
