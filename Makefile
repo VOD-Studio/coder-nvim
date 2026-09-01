@@ -9,6 +9,7 @@ all: docker
 
 docker:
 	docker build --progress=plain \
+		--no-cache \
 		--add-host=host.docker.internal:host-gateway \
 		--build-arg http_proxy="$(PROXY_URL)" \
 		--build-arg https_proxy="$(PROXY_URL)" \
